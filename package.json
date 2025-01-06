@@ -1,0 +1,26 @@
+{
+  "name": "printdesk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Print traffic and rights clearance desk for repertory cinemas and film archives",
+  "main": "src/http/server.js",
+  "engines": {
+    "node": ">=20.11 <21"
+  },
+  "scripts": {
+    "start": "node src/http/server.js",
+    "dev": "node --watch src/http/server.js",
+    "test": "jest",
+    "test:unit": "jest tests/unit",
+    "lint": "eslint src tests"
+  },
+  "dependencies": {
+    "dotenv": "16.4.7",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "eslint": "8.57.1",
+    "jest": "29.7.0"
+  },
+  "license": "UNLICENSED"
+}
