@@ -1,12 +1,30 @@
 'use strict';
 
-module.exports = {
+const shared = {
   testEnvironment: 'node',
-  roots: ['<rootDir>/tests'],
-  testMatch: ['**/*.test.js'],
   clearMocks: true,
   restoreMocks: true,
+};
+
+module.exports = {
   collectCoverageFrom: ['src/**/*.js'],
   coverageDirectory: 'coverage',
-  verbose: false,
+  projects: [
+    {
+      ...shared,
+      displayName: 'unit',
+      roots: ['<rootDir>/tests/unit'],
+      testMatch: ['**/*.test.js'],
+    },
+    {
+      ...shared,
+      displayName: 'integration',
+      roots: ['<rootDir>/tests/integration'],
+      testMatch: ['**/*.test.js'],
+      globalSetup: '<rootDir>/tests/helpers/globalSetup.js',
+      globalTeardown: '<rootDir>/tests/helpers/globalTeardown.js',
+      testTimeout: 30000,
+      maxWorkers: 1,
+    },
+  ],
 };
