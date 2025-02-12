@@ -9,6 +9,7 @@ const {
   withTransaction,
 } = require('../../../src/db/connection');
 const { DeskError } = require('../../../src/lib/errors');
+const { testDatabaseUri } = require('../../helpers/db');
 
 describe('mongo connection', () => {
   afterEach(async () => {
@@ -21,15 +22,15 @@ describe('mongo connection', () => {
   });
 
   it('opens once and hands the same handle back', async () => {
-    const first = await connect({ uri: process.env.MONGO_URI });
-    const second = await connect({ uri: process.env.MONGO_URI });
+    const first = await connect({ uri: testDatabaseUri() });
+    const second = await connect({ uri: testDatabaseUri() });
 
     expect(second).toBe(first);
     expect(isConnected()).toBe(true);
   });
 
   it('answers a ping with a round trip in milliseconds', async () => {
-    await connect({ uri: process.env.MONGO_URI });
+    await connect({ uri: testDatabaseUri() });
 
     const elapsed = await ping();
 
@@ -55,7 +56,7 @@ describe('mongo connection', () => {
   });
 
   it('commits the whole unit of work or none of it', async () => {
-    const conn = await connect({ uri: process.env.MONGO_URI });
+    const conn = await connect({ uri: testDatabaseUri() });
     const ledger = conn.db.collection('transaction-probe');
     await ledger.deleteMany({});
 
@@ -76,7 +77,7 @@ describe('mongo connection', () => {
   });
 
   it('closing twice is not an error', async () => {
-    await connect({ uri: process.env.MONGO_URI });
+    await connect({ uri: testDatabaseUri() });
     await disconnect();
     await expect(disconnect()).resolves.toBeUndefined();
   });

@@ -2,7 +2,7 @@
 
 const { getConnection } = require('../db/connection');
 
-const definitions = [require('./rightsHolder'), require('./title')];
+const definitions = [require('./rightsHolder'), require('./title'), require('./venue')];
 
 const registered = new WeakMap();
 

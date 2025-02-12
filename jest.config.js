@@ -7,6 +7,7 @@ const shared = {
 };
 
 module.exports = {
+  testTimeout: 30000,
   collectCoverageFrom: ['src/**/*.js'],
   coverageDirectory: 'coverage',
   projects: [
@@ -23,8 +24,6 @@ module.exports = {
       testMatch: ['**/*.test.js'],
       globalSetup: '<rootDir>/tests/helpers/globalSetup.js',
       globalTeardown: '<rootDir>/tests/helpers/globalTeardown.js',
-      testTimeout: 30000,
-      maxWorkers: 1,
     },
   ],
 };
