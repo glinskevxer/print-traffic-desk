@@ -39,7 +39,11 @@ async function connect({ uri, maxPoolSize, serverSelectionTimeoutMs } = {}, log 
   }
 
   mongoose.set('strictQuery', true);
-  mongoose.set('sanitizeFilter', true);
+  // sanitizeFilter is deliberately off. It rewrites every operator object it
+  // did not build itself, which breaks keyset paging, and the desk never puts
+  // a client supplied object into a filter: zod has reduced it to a primitive
+  // by the time a service sees it.
+  mongoose.set('sanitizeFilter', false);
 
   connecting = mongoose
     .createConnection(uri, {
