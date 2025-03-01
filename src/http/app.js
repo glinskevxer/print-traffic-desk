@@ -4,6 +4,7 @@ const express = require('express');
 const { requestContext, requestLogging } = require('./middleware/requestContext');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');
+const { titleRoutes } = require('./routes/titles');
 const { logger } = require('../lib/logger');
 const { version } = require('../../package.json');
 
@@ -24,6 +25,7 @@ function createApp({ log = null, bodyLimit = '256kb', exposeInternal = false } =
   app.use(express.json({ limit: bodyLimit }));
 
   app.use('/health', healthRoutes({ version, startedAt }));
+  app.use('/titles', titleRoutes());
 
   app.use(notFoundHandler());
   app.use(errorHandler({ exposeInternal }));
