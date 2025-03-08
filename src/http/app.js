@@ -6,6 +6,7 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');
 const { titleRoutes } = require('./routes/titles');
 const { venueRoutes } = require('./routes/venues');
+const { rightsHolderRoutes } = require('./routes/rightsHolders');
 const { logger } = require('../lib/logger');
 const { version } = require('../../package.json');
 
@@ -28,6 +29,7 @@ function createApp({ log = null, bodyLimit = '256kb', exposeInternal = false } =
   app.use('/health', healthRoutes({ version, startedAt }));
   app.use('/titles', titleRoutes());
   app.use('/venues', venueRoutes());
+  app.use('/rights-holders', rightsHolderRoutes());
 
   app.use(notFoundHandler());
   app.use(errorHandler({ exposeInternal }));
