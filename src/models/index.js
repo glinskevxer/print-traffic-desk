@@ -7,6 +7,7 @@ const definitions = [
   require('./title'),
   require('./venue'),
   require('./printElement'),
+  require('./inspectionReport'),
 ];
 
 const registered = new WeakMap();
