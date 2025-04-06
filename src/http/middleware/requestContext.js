@@ -1,6 +1,7 @@
 'use strict';
 
 const { newRequestId } = require('../../lib/ids');
+const { runWithContext } = require('../../lib/context');
 
 const HEADER = 'x-request-id';
 
@@ -19,7 +20,9 @@ function requestContext({ logger }) {
     req.log = logger.child({ requestId, method: req.method, path: req.path });
     res.set(HEADER, requestId);
 
-    next();
+    // Everything downstream of here runs inside the request's context, so an
+    // audit written five calls deep still knows who asked for it.
+    runWithContext({ requestId, source: 'http' }, () => next());
   };
 }
 
