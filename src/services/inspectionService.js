@@ -8,6 +8,7 @@ const { assessCondition } = require('../domain/condition/grade');
 const { withoutRestrictions } = require('../domain/handling');
 const { assertTransition, statusAfterVerdict, isTerminal } = require('../domain/elements/status');
 const { localDateOf } = require('../lib/dates');
+const audit = require('../lib/audit');
 
 async function loadElement(publicId, session = null) {
   const { PrintElement } = models();
@@ -97,12 +98,33 @@ async function recordInspection(elementPublicId, input) {
       { session },
     );
 
+    const statusBefore = element.status;
+    const gradeBefore = element.conditionGrade;
+
     element.conditionGrade = assessment.grade;
     element.handlingRestrictions = assessment.restrictions;
     element.screeningsSinceInspection = 0;
     element.lastInspectedOn = localDateOf(report.inspectedAt, venue.timezone);
     element.status = nextStatus;
     await element.save({ session });
+
+    await audit.record(
+      {
+        action: 'element.inspected',
+        subjectType: 'print-element',
+        subjectId: element.publicId,
+        changes: [
+          { field: 'status', before: statusBefore, after: nextStatus },
+          { field: 'conditionGrade', before: gradeBefore, after: assessment.grade },
+        ].filter((change) => change.before !== change.after),
+        metadata: {
+          report: report.publicId,
+          verdict: assessment.verdict,
+          inspector: input.inspector,
+        },
+      },
+      { session },
+    );
 
     return { report, element, assessment };
   });

@@ -7,6 +7,7 @@ const { paginate } = require('../lib/pagination');
 const { assertTransition, isCommitted } = require('../domain/elements/status');
 const { boothRunsGauge, playableSoundFormat } = require('../domain/formats');
 const { blocksPublicExhibition } = require('../domain/handling');
+const audit = require('../lib/audit');
 
 async function getElement(publicId, session = null) {
   const { PrintElement } = models();
@@ -112,28 +113,56 @@ async function relocate(publicId, venuePublicId, reason) {
       });
     }
 
+    const from = String(element.currentLocation);
     element.currentLocation = venue._id;
     element.provenance = reason
       ? `${element.provenance ? `${element.provenance}\n` : ''}${reason}`
       : element.provenance;
     await element.save({ session });
+
+    await audit.record(
+      {
+        action: 'element.relocated',
+        subjectType: 'print-element',
+        subjectId: element.publicId,
+        changes: [{ field: 'currentLocation', before: from, after: String(venue._id) }],
+        metadata: { venueCode: venue.code, reason: reason || null },
+      },
+      { session },
+    );
     return element;
   });
 }
 
 async function setStatus(publicId, status, reason) {
-  const element = await getElement(publicId);
-  assertTransition(element.status, status, { element: publicId });
+  return withTransaction(async (session) => {
+    const element = await getElement(publicId, session);
+    assertTransition(element.status, status, { element: publicId });
 
-  if (status === 'retired' && !reason) {
-    throw new RuleRefusedError('retiring a print needs a reason', { element: publicId });
-  }
-  element.status = status;
-  if (reason) {
-    element.provenance = `${element.provenance ? `${element.provenance}\n` : ''}${reason}`;
-  }
-  await element.save();
-  return element;
+    if (status === 'retired' && !reason) {
+      throw new RuleRefusedError('retiring a print needs a reason', { element: publicId });
+    }
+    const before = element.status;
+    element.status = status;
+    if (reason) {
+      element.provenance = `${element.provenance ? `${element.provenance}\n` : ''}${reason}`;
+    }
+    await element.save({ session });
+
+    if (before !== status) {
+      await audit.record(
+        {
+          action: 'element.status-changed',
+          subjectType: 'print-element',
+          subjectId: element.publicId,
+          changes: [{ field: 'status', before, after: status }],
+          metadata: { reason: reason || null },
+        },
+        { session },
+      );
+    }
+    return element;
+  });
 }
 
 /**
