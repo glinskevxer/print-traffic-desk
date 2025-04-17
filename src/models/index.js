@@ -9,6 +9,7 @@ const definitions = [
   require('./printElement'),
   require('./inspectionReport'),
   require('./auditEvent'),
+  require('./rightsWindow'),
 ];
 
 const registered = new WeakMap();

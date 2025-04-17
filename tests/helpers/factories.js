@@ -95,6 +95,23 @@ async function makePrintElement(overrides = {}) {
   });
 }
 
+async function makeRightsWindow(overrides = {}) {
+  const { RightsWindow } = models();
+  const title = overrides.title || (await makeTitle())._id;
+  const rightsHolder = overrides.rightsHolder || (await makeRightsHolder())._id;
+  return RightsWindow.create({
+    territory: 'GB',
+    exhibitionTypes: ['repertory'],
+    startsOn: '2025-01-01',
+    endsOn: '2025-12-31',
+    terms: { kind: 'flat', currency: 'GBP', flatFeeMinor: 25000 },
+    status: 'active',
+    ...overrides,
+    title,
+    rightsHolder,
+  });
+}
+
 module.exports = {
   nextBarcode,
   resetFactoryCounter,
@@ -102,4 +119,5 @@ module.exports = {
   makeTitle,
   makeVenue,
   makePrintElement,
+  makeRightsWindow,
 };
