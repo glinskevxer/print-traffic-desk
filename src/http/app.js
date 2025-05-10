@@ -9,6 +9,7 @@ const { venueRoutes } = require('./routes/venues');
 const { rightsHolderRoutes } = require('./routes/rightsHolders');
 const { elementRoutes } = require('./routes/elements');
 const { inspectionRoutes } = require('./routes/inspections');
+const { rightsRoutes } = require('./routes/rights');
 const { logger } = require('../lib/logger');
 const { version } = require('../../package.json');
 
@@ -34,6 +35,7 @@ function createApp({ log = null, bodyLimit = '256kb', exposeInternal = false } =
   app.use('/rights-holders', rightsHolderRoutes());
   app.use('/elements', elementRoutes());
   app.use('/', inspectionRoutes());
+  app.use('/', rightsRoutes());
 
   app.use(notFoundHandler());
   app.use(errorHandler({ exposeInternal }));
