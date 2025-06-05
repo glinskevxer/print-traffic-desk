@@ -5,8 +5,7 @@ const { withTransaction } = require('../db/connection');
 const { NotFoundError, ConflictError, RuleRefusedError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
 const { assertTransition, isCommitted } = require('../domain/elements/status');
-const { boothRunsGauge, playableSoundFormat } = require('../domain/formats');
-const { blocksPublicExhibition } = require('../domain/handling');
+const { boothCompatibility } = require('../domain/elements/compatibility');
 const audit = require('../lib/audit');
 
 async function getElement(publicId, session = null) {
@@ -163,45 +162,6 @@ async function setStatus(publicId, status, reason) {
     }
     return element;
   });
-}
-
-/**
- * Everything about the print that a booth has to satisfy, answered in one
- * place so the booking path and the catalogue give the same answer.
- */
-function boothCompatibility(element, venue) {
-  const problems = [];
-
-  if (!boothRunsGauge(element.gauge, venue.booth.gauges)) {
-    problems.push({ rule: 'gauge', detail: `${venue.code} does not run ${element.gauge}` });
-  }
-  const sound = playableSoundFormat(element.soundFormat, venue.booth.soundFormats);
-  if (!sound) {
-    problems.push({ rule: 'sound', detail: `${venue.code} cannot reproduce ${element.soundFormat}` });
-  }
-  if (!venue.booth.speeds.includes(element.projectionSpeed)) {
-    problems.push({ rule: 'speed', detail: `${venue.code} cannot hold ${element.projectionSpeed}fps` });
-  }
-  if (element.baseStock === 'nitrate' && !venue.booth.nitrateCertified) {
-    problems.push({ rule: 'nitrate', detail: `${venue.code} holds no nitrate certificate` });
-  }
-  if (element.hasRestriction('changeover-only') && !venue.booth.changeoverCapable) {
-    problems.push({ rule: 'changeover', detail: `${venue.code} cannot run changeover` });
-  }
-  if (element.hasRestriction('no-platter') && !venue.booth.changeoverCapable) {
-    problems.push({ rule: 'platter', detail: `${venue.code} can only run from a platter` });
-  }
-  if (element.reelCount > venue.booth.reelCapacity) {
-    problems.push({
-      rule: 'reels',
-      detail: `${element.reelCount} reels is past the ${venue.booth.reelCapacity} this booth holds`,
-    });
-  }
-  if (blocksPublicExhibition(element.handlingRestrictions)) {
-    problems.push({ rule: 'exhibition', detail: 'this element is for study and duplication only' });
-  }
-
-  return { compatible: problems.length === 0, problems, playableSound: sound };
 }
 
 module.exports = {
