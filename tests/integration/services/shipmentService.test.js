@@ -214,3 +214,69 @@ describe('print traffic', () => {
     ]);
   });
 });
+
+describe('what an element is spoken for', () => {
+  let home;
+  let away;
+  let element;
+
+  beforeAll(async () => {
+    const conn = await openTestConnection();
+    registerModels(conn);
+    await syncIndexes();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    home = await makeVenue({ code: 'GB-LON-VAULT' });
+    away = await makeVenue({ code: 'GB-GLA-GFT', city: 'Glasgow' });
+    element = await makePrintElement({
+      currentLocation: home._id,
+      custodian: home._id,
+      status: 'available',
+    });
+  });
+
+  it('has nothing against a print that has never travelled', async () => {
+    expect(await service.commitmentsFor(element.publicId)).toEqual([]);
+    expect(await service.isElementFree(element.publicId, '2025-06-01', '2025-06-30')).toBe(true);
+  });
+
+  it('holds the print for the span of a planned leg', async () => {
+    const { shipment } = await service.planLeg({
+      elementId: element.publicId,
+      toVenueId: away.publicId,
+      leg: 'outbound',
+      screeningLocalDate: '2025-06-20',
+      today: '2025-05-15',
+    });
+
+    const spans = await service.commitmentsFor(element.publicId);
+
+    expect(spans).toHaveLength(1);
+    expect(spans[0].reference).toBe(shipment.publicId);
+    expect(await service.isElementFree(element.publicId, '2025-06-17', '2025-06-19')).toBe(false);
+  });
+
+  it('offers the next date the print is free', async () => {
+    await service.planLeg({
+      elementId: element.publicId,
+      toVenueId: away.publicId,
+      leg: 'outbound',
+      screeningLocalDate: '2025-06-20',
+      today: '2025-05-15',
+    });
+
+    const next = await service.nextFreeDate(element.publicId, '2025-06-16', 3);
+
+    expect(next > '2025-06-18').toBe(true);
+  });
+
+  it('refuses to answer for a print that is not catalogued', async () => {
+    await expect(service.commitmentsFor('elem_0000000000000000')).rejects.toThrow(/does not exist/);
+  });
+});

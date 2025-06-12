@@ -8,6 +8,12 @@ const audit = require('../lib/audit');
 const { assertTransition } = require('../domain/elements/status');
 const { planOutbound, planReturn } = require('../domain/traffic/routing');
 const { permittedServices } = require('../domain/traffic/carriers');
+const {
+  spansFromShipments,
+  mergeSpans,
+  nextFreeFrom,
+  isFreeBetween,
+} = require('../domain/traffic/availability');
 
 async function loadShipment(publicId, session = null) {
   const { Shipment } = models();
@@ -283,7 +289,35 @@ async function overdueArrivals(today) {
   }).sort({ plannedArrivalOn: 1 });
 }
 
+/**
+ * Everything holding one element out of circulation, as one merged list. The
+ * booking path asks this before it offers a date, and the catalogue shows it
+ * next to the print.
+ */
+async function commitmentsFor(elementPublicId) {
+  const { PrintElement, Shipment } = models();
+  const element = await PrintElement.byPublicId(elementPublicId);
+  if (!element) throw new NotFoundError('print element', elementPublicId);
+
+  const shipments = await Shipment.find({ element: element._id }).sort({ plannedDispatchOn: 1 });
+  return mergeSpans(spansFromShipments(shipments));
+}
+
+async function isElementFree(elementPublicId, startsOn, endsOn) {
+  const spans = await commitmentsFor(elementPublicId);
+  return isFreeBetween(spans, startsOn, endsOn);
+}
+
+/** When the desk could next offer this print for a stretch of days. */
+async function nextFreeDate(elementPublicId, from, days) {
+  const spans = await commitmentsFor(elementPublicId);
+  return nextFreeFrom(spans, from, days);
+}
+
 module.exports = {
+  commitmentsFor,
+  isElementFree,
+  nextFreeDate,
   planLeg,
   dispatch,
   markArrived,
