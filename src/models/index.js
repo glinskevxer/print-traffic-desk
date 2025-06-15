@@ -12,6 +12,7 @@ const definitions = [
   require('./rightsWindow'),
   require('./shipment'),
   require('./booking'),
+  require('./idempotencyRecord'),
 ];
 
 const registered = new WeakMap();
