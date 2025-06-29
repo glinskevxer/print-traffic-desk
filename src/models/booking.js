@@ -122,8 +122,11 @@ bookingSchema.methods.isLive = function isLive() {
   return ['held', 'cleared', 'confirmed'].includes(this.status);
 };
 
+// A hold counts against the licence allowance from the moment it is taken.
+// It used to count only once cleared, and two houses holding the last
+// screening of a capped licence both got told yes.
 bookingSchema.methods.countsAgainstLicence = function countsAgainstLicence() {
-  return ['cleared', 'confirmed', 'settled'].includes(this.status);
+  return ['held', 'cleared', 'confirmed', 'settled'].includes(this.status);
 };
 
 bookingSchema.methods.hasLapsed = function hasLapsed(now = new Date()) {

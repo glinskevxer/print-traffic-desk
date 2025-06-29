@@ -43,7 +43,7 @@ describe('booking model', () => {
     expect(booking.publicId).toMatch(/^bkg_/);
     expect(booking.status).toBe('held');
     expect(booking.isLive()).toBe(true);
-    expect(booking.countsAgainstLicence()).toBe(false);
+    expect(booking.countsAgainstLicence()).toBe(true);
   });
 
   it('refuses a reference that is not the printed shape', async () => {
