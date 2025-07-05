@@ -1,6 +1,7 @@
 'use strict';
 
 const { connect, disconnect, getConnection } = require('../../src/db/connection');
+const { registerModels, syncIndexes } = require('../../src/models');
 
 /**
  * Jest runs suites in parallel workers against the one replica set the global
@@ -18,6 +19,24 @@ async function openTestConnection() {
   return connect({ uri: testDatabaseUri(), maxPoolSize: 5, serverSelectionTimeoutMs: 5000 });
 }
 
+/**
+ * Connects, registers the models and builds the indexes. Jest hands every test
+ * file a fresh module registry but reuses the worker process, so the fact that
+ * this worker's database already has its indexes is kept on globalThis. Twenty
+ * suites each rebuilding forty indexes cost more than the tests did.
+ */
+async function useDatabase() {
+  const connection = await openTestConnection();
+  const models = registerModels(connection);
+
+  const key = `printdesk-indexes-${process.env.JEST_WORKER_ID || '1'}`;
+  if (!globalThis[key]) {
+    await syncIndexes();
+    globalThis[key] = true;
+  }
+  return models;
+}
+
 async function closeTestConnection() {
   await disconnect();
 }
@@ -29,4 +48,10 @@ async function clearCollections() {
   await Promise.all(collections.map((collection) => collection.deleteMany({})));
 }
 
-module.exports = { testDatabaseUri, openTestConnection, closeTestConnection, clearCollections };
+module.exports = {
+  testDatabaseUri,
+  openTestConnection,
+  useDatabase,
+  closeTestConnection,
+  clearCollections,
+};

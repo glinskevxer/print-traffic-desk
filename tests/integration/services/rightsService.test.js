@@ -1,7 +1,6 @@
 'use strict';
 
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { makeTitle, makeRightsHolder, makeVenue, makeRightsWindow } = require('../../helpers/factories');
 const service = require('../../../src/services/rightsService');
 
@@ -11,9 +10,7 @@ describe('rights windows', () => {
   let prince;
 
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    registerModels(conn);
-    await syncIndexes();
+    await useDatabase();
   });
 
   afterAll(async () => {

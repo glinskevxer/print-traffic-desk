@@ -2,8 +2,8 @@
 
 const request = require('supertest');
 const { buildTestApp } = require('../../helpers/app');
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes, models } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
+const { models } = require('../../../src/models');
 const { makeVenue, makePrintElement, makeTitle } = require('../../helpers/factories');
 
 describe('venue endpoints', () => {
@@ -24,9 +24,7 @@ describe('venue endpoints', () => {
   });
 
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    registerModels(conn);
-    await syncIndexes();
+    await useDatabase();
     ({ app } = buildTestApp());
   });
 

@@ -2,8 +2,7 @@
 
 const request = require('supertest');
 const { buildTestApp } = require('../../helpers/app');
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { makeTitle, makeRightsHolder, makeVenue } = require('../../helpers/factories');
 
 describe('rights window endpoints', () => {
@@ -13,9 +12,7 @@ describe('rights window endpoints', () => {
   let prince;
 
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    registerModels(conn);
-    await syncIndexes();
+    await useDatabase();
     ({ app } = buildTestApp());
   });
 

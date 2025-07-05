@@ -2,8 +2,8 @@
 
 const express = require('express');
 const request = require('supertest');
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes, models } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
+const { models } = require('../../../src/models');
 const { idempotency } = require('../../../src/http/middleware/idempotency');
 const { errorHandler } = require('../../../src/http/middleware/errorHandler');
 const { createLogger } = require('../../../src/lib/logger');
@@ -34,9 +34,7 @@ function buildApp({ required = false } = {}) {
 
 describe('idempotent writes', () => {
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    registerModels(conn);
-    await syncIndexes();
+    await useDatabase();
   });
 
   afterAll(async () => {

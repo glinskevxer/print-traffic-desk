@@ -1,7 +1,7 @@
 'use strict';
 
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes, models } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
+const { models } = require('../../../src/models');
 const { makePrintElement, makeVenue } = require('../../helpers/factories');
 const { runWithContext } = require('../../../src/lib/context');
 const audit = require('../../../src/lib/audit');
@@ -10,9 +10,7 @@ const inspectionService = require('../../../src/services/inspectionService');
 
 describe('the audit trail', () => {
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    registerModels(conn);
-    await syncIndexes();
+    await useDatabase();
   });
 
   afterAll(async () => {

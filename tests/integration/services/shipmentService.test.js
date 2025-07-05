@@ -1,7 +1,7 @@
 'use strict';
 
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes, models } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
+const { models } = require('../../../src/models');
 const { makePrintElement, makeVenue } = require('../../helpers/factories');
 const service = require('../../../src/services/shipmentService');
 
@@ -11,9 +11,7 @@ describe('print traffic', () => {
   let element;
 
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    registerModels(conn);
-    await syncIndexes();
+    await useDatabase();
   });
 
   afterAll(async () => {
@@ -221,9 +219,7 @@ describe('what an element is spoken for', () => {
   let element;
 
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    registerModels(conn);
-    await syncIndexes();
+    await useDatabase();
   });
 
   afterAll(async () => {

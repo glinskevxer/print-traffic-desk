@@ -91,15 +91,21 @@ function idempotency({ required = false } = {}) {
   };
 }
 
-/** Captures whatever the handler answered so it can be replayed verbatim. */
+/**
+ * Captures whatever the handler answered so it can be replayed verbatim. The
+ * record is written before the response goes out, not after: a desk that
+ * retries the instant it sees a socket close would otherwise race the write
+ * and book a second screening.
+ */
 function hookResponse(res, save) {
   const originalJson = res.json.bind(res);
   res.json = (body) => {
-    const result = originalJson(body);
-    save(res.statusCode, body).catch(() => {
-      // Losing the record only costs the caller a duplicate check on retry.
-    });
-    return result;
+    save(res.statusCode, body)
+      .catch(() => {
+        // Losing the record only costs the caller a duplicate check on retry.
+      })
+      .then(() => originalJson(body));
+    return res;
   };
 }
 

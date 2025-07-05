@@ -1,16 +1,14 @@
 'use strict';
 
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes, models } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
+const { models } = require('../../../src/models');
 const { makePrintElement, makeVenue } = require('../../helpers/factories');
 
 describe('shipment model', () => {
   let Shipment;
 
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    ({ Shipment } = registerModels(conn));
-    await syncIndexes();
+    ({ Shipment } = await useDatabase());
   });
 
   afterAll(async () => {

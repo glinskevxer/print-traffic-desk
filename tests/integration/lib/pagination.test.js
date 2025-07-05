@@ -1,7 +1,7 @@
 'use strict';
 
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes, models } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
+const { models } = require('../../../src/models');
 const { makeTitle, makeRightsHolder } = require('../../helpers/factories');
 const { paginate, pageEnvelope } = require('../../../src/lib/pagination');
 
@@ -10,9 +10,7 @@ describe('paging a collection', () => {
   let holderId;
 
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    ({ Title } = registerModels(conn));
-    await syncIndexes();
+    ({ Title } = await useDatabase());
   });
 
   afterAll(async () => {

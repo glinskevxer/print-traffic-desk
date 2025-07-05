@@ -1,7 +1,6 @@
 'use strict';
 
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 
 let Venue;
 
@@ -35,9 +34,7 @@ const prince = {
 
 describe('venue model', () => {
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    ({ Venue } = registerModels(conn));
-    await syncIndexes();
+    ({ Venue } = await useDatabase());
   });
 
   afterAll(async () => {

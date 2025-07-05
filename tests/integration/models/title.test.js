@@ -1,7 +1,6 @@
 'use strict';
 
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 
 let Title;
 let RightsHolder;
@@ -19,9 +18,7 @@ async function makeHolder(overrides = {}) {
 
 describe('title and rights holder models', () => {
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    ({ Title, RightsHolder } = registerModels(conn));
-    await syncIndexes();
+    ({ Title, RightsHolder } = await useDatabase());
   });
 
   afterAll(async () => {

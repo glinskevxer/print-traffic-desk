@@ -1,7 +1,6 @@
 'use strict';
 
-const { openTestConnection, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { registerModels, syncIndexes } = require('../../../src/models');
+const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { makeTitle, makeVenue, makePrintElement } = require('../../helpers/factories');
 const { bookingReference } = require('../../../src/lib/ids');
 
@@ -9,9 +8,7 @@ describe('booking model', () => {
   let Booking;
 
   beforeAll(async () => {
-    const conn = await openTestConnection();
-    ({ Booking } = registerModels(conn));
-    await syncIndexes();
+    ({ Booking } = await useDatabase());
   });
 
   afterAll(async () => {
