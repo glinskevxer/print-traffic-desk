@@ -239,3 +239,164 @@ describe('taking a booking', () => {
     expect(outside.items).toHaveLength(0);
   });
 });
+
+describe('moving a booking on', () => {
+  let holder;
+  let title;
+  let venue;
+  let vault;
+  let element;
+
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    element = await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  const ask = (overrides = {}) => ({
+    titleId: title.publicId,
+    venueId: venue.publicId,
+    localDate: '2025-06-20',
+    localTime: '19:30',
+    exhibitionType: 'repertory',
+    today: '2025-05-15',
+    ...overrides,
+  });
+
+  it('writes two legs when a hold is confirmed', async () => {
+    const { booking } = await service.requestBooking(ask());
+
+    const result = await service.confirmBooking(booking.publicId);
+
+    expect(result.booking.status).toBe('confirmed');
+    expect(result.booking.holdExpiresAt).toBeNull();
+    expect(result.shipments.map((leg) => leg.leg)).toEqual(['outbound', 'return']);
+  });
+
+  it('confirming twice does nothing the second time', async () => {
+    const { booking } = await service.requestBooking(ask());
+    await service.confirmBooking(booking.publicId);
+
+    const again = await service.confirmBooking(booking.publicId);
+
+    expect(again.shipments).toEqual([]);
+    expect(await models().Shipment.countDocuments()).toBe(2);
+  });
+
+  it('will not confirm a hold that has run out', async () => {
+    const { booking } = await service.requestBooking(ask({ holdMinutes: 15 }));
+    booking.holdExpiresAt = new Date(Date.now() - 1000);
+    await booking.save();
+
+    await expect(service.confirmBooking(booking.publicId)).rejects.toThrow(/has run out/);
+  });
+
+  it('gives the print and the licence count back when a booking is cancelled', async () => {
+    const { booking } = await service.requestBooking(ask());
+
+    await service.cancelBooking(booking.publicId, { reason: 'the season was pulled' });
+
+    const { PrintElement, RightsWindow } = models();
+    expect((await PrintElement.findById(element._id)).status).toBe('available');
+    expect((await RightsWindow.findOne({ title: title._id })).screeningsUsed).toBe(0);
+  });
+
+  it('cancels the legs that had not gone yet', async () => {
+    const { booking } = await service.requestBooking(ask());
+    await service.confirmBooking(booking.publicId);
+
+    const result = await service.cancelBooking(booking.publicId, { reason: 'print damaged' });
+
+    expect(result.legsCancelled).toBe(2);
+    expect(await models().Shipment.countDocuments({ status: 'cancelled' })).toBe(2);
+  });
+
+  it('leaves a leg that is already on the road alone', async () => {
+    const { booking } = await service.requestBooking(ask());
+    const { shipments } = await service.confirmBooking(booking.publicId);
+    shipments[0].status = 'in-transit';
+    await shipments[0].save();
+
+    const result = await service.cancelBooking(booking.publicId, { reason: 'venue flooded' });
+
+    expect(result.legsCancelled).toBe(1);
+  });
+
+  it('refuses a cancellation with no reason', async () => {
+    const { booking } = await service.requestBooking(ask());
+
+    await expect(service.cancelBooking(booking.publicId, {})).rejects.toThrow(/needs a reason/);
+  });
+
+  it('will not cancel a booking twice', async () => {
+    const { booking } = await service.requestBooking(ask());
+    await service.cancelBooking(booking.publicId, { reason: 'first' });
+
+    await expect(
+      service.cancelBooking(booking.publicId, { reason: 'second' }),
+    ).rejects.toThrow(/already closed/);
+  });
+
+  it('records the cancellation fee when the desk charges one', async () => {
+    const { booking } = await service.requestBooking(ask());
+
+    const result = await service.cancelBooking(booking.publicId, {
+      reason: 'cancelled inside the notice period',
+      feeMinor: 5000,
+    });
+
+    expect(result.booking.cancellation.feeMinor).toBe(5000);
+  });
+
+  it('sweeps a hold nobody confirmed', async () => {
+    const { booking } = await service.requestBooking(ask());
+    booking.holdExpiresAt = new Date(Date.now() - 1000);
+    await booking.save();
+
+    const lapsed = await service.lapseExpiredHolds();
+
+    expect(lapsed).toEqual([booking.publicId]);
+    expect((await service.getBooking(booking.publicId)).status).toBe('lapsed');
+    expect((await models().PrintElement.findById(element._id)).status).toBe('available');
+  });
+
+  it('leaves a hold that is still running', async () => {
+    await service.requestBooking(ask());
+
+    expect(await service.lapseExpiredHolds()).toEqual([]);
+  });
+
+  it('never sweeps a confirmed booking', async () => {
+    const { booking } = await service.requestBooking(ask());
+    await service.confirmBooking(booking.publicId);
+
+    expect(await service.lapseExpiredHolds(new Date('2030-01-01'))).toEqual([]);
+  });
+
+  it('frees the print so the next booking can have it', async () => {
+    const first = await service.requestBooking(ask());
+    await service.cancelBooking(first.booking.publicId, { reason: 'changed the programme' });
+
+    const second = await service.requestBooking(ask({ localDate: '2025-06-21' }));
+
+    expect(String(second.element._id)).toBe(String(element._id));
+  });
+});

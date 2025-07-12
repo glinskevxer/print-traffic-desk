@@ -254,6 +254,176 @@ async function getBooking(publicId) {
   return loadBooking(publicId);
 }
 
+/**
+ * Confirming turns a hold into traffic. Two legs are written now rather than
+ * at hold time, because a hold that lapses should leave no despatch note
+ * behind for somebody to act on.
+ */
+async function confirmBooking(publicId, { confirmedBy } = {}) {
+  const { Booking, Shipment, PrintElement, Venue } = models();
+
+  return withTransaction(async (session) => {
+    const booking = await loadBooking(publicId, session);
+
+    if (booking.status === 'confirmed') return { booking, shipments: [] };
+    if (booking.status !== 'held') {
+      throw new RuleRefusedError('only a held booking can be confirmed', {
+        booking: publicId,
+        status: booking.status,
+      });
+    }
+    if (booking.hasLapsed()) {
+      throw new RuleRefusedError('this hold has run out, ask for it again', { booking: publicId });
+    }
+
+    const element = await PrintElement.findById(booking.element, null, { session });
+    const venue = await Venue.findById(booking.venue, null, { session });
+    const origin = await Venue.findById(element.currentLocation, null, { session });
+
+    const legs = await Shipment.create(
+      [
+        {
+          element: element._id,
+          fromVenue: origin._id,
+          toVenue: venue._id,
+          leg: 'outbound',
+          service: booking.traffic.service,
+          plannedDispatchOn: booking.traffic.committedFrom,
+          plannedArrivalOn: booking.localDate,
+          cans: element.reelCount,
+        },
+        {
+          element: element._id,
+          fromVenue: venue._id,
+          toVenue: origin._id,
+          leg: 'return',
+          service: booking.traffic.service,
+          plannedDispatchOn: addDays(booking.localDate, 1),
+          plannedArrivalOn: booking.traffic.committedUntil,
+          cans: element.reelCount,
+        },
+      ],
+      { session },
+    );
+
+    booking.status = 'confirmed';
+    booking.holdExpiresAt = null;
+    booking.traffic.outboundShipment = legs[0]._id;
+    booking.traffic.returnShipment = legs[1]._id;
+    if (confirmedBy) booking.bookedBy = confirmedBy;
+    await booking.save({ session });
+
+    await audit.record(
+      {
+        action: 'booking.confirmed',
+        subjectType: 'booking',
+        subjectId: booking.publicId,
+        changes: [{ field: 'status', before: 'held', after: 'confirmed' }],
+        metadata: { outbound: legs[0].publicId, return: legs[1].publicId },
+      },
+      { session },
+    );
+
+    return { booking, shipments: legs };
+  });
+}
+
+/**
+ * Releases everything a booking was holding: the licence count, the print and
+ * any leg that had not yet gone. A leg already on the road is left alone,
+ * because the print is in a van and cancelling the paperwork does not stop it.
+ */
+async function releaseBooking(booking, { session, nextStatus, reason, feeMinor }) {
+  const { Shipment, PrintElement, RightsWindow } = models();
+
+  const openLegs = await Shipment.find(
+    {
+      _id: { $in: [booking.traffic.outboundShipment, booking.traffic.returnShipment].filter(Boolean) },
+      status: 'planned',
+    },
+    null,
+    { session },
+  );
+  for (const leg of openLegs) {
+    leg.status = 'cancelled';
+    // eslint-disable-next-line no-await-in-loop
+    await leg.save({ session });
+  }
+
+  const element = await PrintElement.findById(booking.element, null, { session });
+  if (element && element.status === 'committed') {
+    element.status = 'available';
+    await element.save({ session });
+  }
+
+  if (booking.rightsWindow) {
+    await RightsWindow.updateOne(
+      { _id: booking.rightsWindow, screeningsUsed: { $gt: 0 } },
+      { $inc: { screeningsUsed: -1 } },
+      { session },
+    );
+  }
+
+  const before = booking.status;
+  booking.status = nextStatus;
+  booking.cancellation = { reason: reason || null, at: new Date(), feeMinor: feeMinor ?? null };
+  await booking.save({ session });
+
+  await audit.record(
+    {
+      action: `booking.${nextStatus}`,
+      subjectType: 'booking',
+      subjectId: booking.publicId,
+      changes: [{ field: 'status', before, after: nextStatus }],
+      metadata: { reason: reason || null, legsCancelled: openLegs.length },
+    },
+    { session },
+  );
+
+  return { booking, element, legsCancelled: openLegs.length };
+}
+
+async function cancelBooking(publicId, { reason, feeMinor }) {
+  return withTransaction(async (session) => {
+    const booking = await loadBooking(publicId, session);
+    if (!booking.isLive()) {
+      throw new RuleRefusedError('this booking is already closed', {
+        booking: publicId,
+        status: booking.status,
+      });
+    }
+    if (!reason) {
+      throw new RuleRefusedError('cancelling a booking needs a reason', { booking: publicId });
+    }
+    return releaseBooking(booking, { session, nextStatus: 'cancelled', reason, feeMinor });
+  });
+}
+
+/**
+ * Sweeps holds nobody confirmed. Run on a timer: a lapsed hold that keeps its
+ * print committed is how a shelf fills up with prints nobody is showing.
+ */
+async function lapseExpiredHolds(now = new Date()) {
+  const { Booking } = models();
+  const expired = await Booking.find({ status: "held", holdExpiresAt: { $lte: now } }).limit(200);
+
+  const lapsed = [];
+  for (const held of expired) {
+    // eslint-disable-next-line no-await-in-loop
+    await withTransaction(async (session) => {
+      const booking = await loadBooking(held.publicId, session);
+      if (booking.status !== "held") return;
+      await releaseBooking(booking, {
+        session,
+        nextStatus: "lapsed",
+        reason: "the hold ran out",
+      });
+      lapsed.push(booking.publicId);
+    });
+  }
+  return lapsed;
+}
+
 async function listBookings(query = {}) {
   const { Booking, Title, Venue, PrintElement } = models();
   const filter = {};
@@ -289,6 +459,10 @@ async function listBookings(query = {}) {
 module.exports = {
   DEFAULT_HOLD_MINUTES,
   requestBooking,
+  confirmBooking,
+  cancelBooking,
+  lapseExpiredHolds,
+  releaseBooking,
   getBooking,
   listBookings,
   loadBooking,
