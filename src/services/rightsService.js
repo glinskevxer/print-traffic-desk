@@ -8,29 +8,8 @@ const audit = require('../lib/audit');
 const { assertTerritory } = require('../domain/rights/territories');
 const { findExclusivityClashes, clashIsResolvable } = require('../domain/rights/exclusivity');
 const { clearScreening, refusalDetails } = require('../domain/rights/clearance');
+const { assertTermsComplete } = require('../domain/royalties/terms');
 const { localDateOf } = require('../lib/dates');
-
-/** Terms are checked here rather than in the schema because the shape a kind
- * needs is not expressible as a field list: a percentage deal without a rate is
- * as broken as a flat deal without a fee. */
-function assertTermsComplete(terms) {
-  const problems = [];
-  if (['flat', 'greater-of'].includes(terms.kind) && terms.flatFeeMinor === undefined) {
-    problems.push('a flat fee is needed');
-  }
-  if (['percentage', 'greater-of', 'split-after-nut'].includes(terms.kind) && !terms.percentageBps) {
-    problems.push('a percentage in basis points is needed');
-  }
-  if (terms.kind === 'split-after-nut' && !terms.houseNutDeductible) {
-    problems.push('a split after the nut has to deduct the nut');
-  }
-  if (terms.capMinor !== undefined && terms.capMinor !== null && terms.flatFeeMinor > terms.capMinor) {
-    problems.push('the flat fee is already above the cap');
-  }
-  if (problems.length > 0) {
-    throw new RuleRefusedError(`these ${terms.kind} terms are incomplete`, { problems });
-  }
-}
 
 async function getWindow(publicId, session = null) {
   const { RightsWindow } = models();
@@ -257,7 +236,6 @@ async function clearScreeningAt({ titleId, venue, instant, exhibitionType, scree
 }
 
 module.exports = {
-  assertTermsComplete,
   createWindow,
   getWindow,
   activateWindow,
