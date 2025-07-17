@@ -11,6 +11,7 @@ const { assertTransition } = require('../domain/elements/status');
 const { rankCandidates } = require('../domain/elements/selection');
 const { planRoundTrip } = require('../domain/traffic/routing');
 const { spansFromShipments, isFreeBetween } = require('../domain/traffic/availability');
+const { computeRoyalty } = require('../domain/royalties/compute');
 const rightsService = require('./rightsService');
 
 const DEFAULT_HOLD_MINUTES = 2880;
@@ -424,6 +425,129 @@ async function lapseExpiredHolds(now = new Date()) {
   return lapsed;
 }
 
+/**
+ * The house rings the takings through the morning after. The royalty is worked
+ * out here and stored with its basis, so a statement six weeks later shows the
+ * same number the venue was told on the phone.
+ */
+async function reportBoxOffice(publicId, input) {
+  const { Booking, Venue, RightsWindow, PrintElement } = models();
+
+  return withTransaction(async (session) => {
+    const booking = await loadBooking(publicId, session);
+
+    if (!['confirmed', 'settled'].includes(booking.status)) {
+      throw new RuleRefusedError('takings can only be reported against a confirmed booking', {
+        booking: publicId,
+        status: booking.status,
+      });
+    }
+    if (booking.status === 'settled') {
+      throw new RuleRefusedError('this booking is already settled', { booking: publicId });
+    }
+
+    const venue = await Venue.findById(booking.venue, null, { session });
+    if (input.currency !== venue.boxOfficeCurrency) {
+      throw new RuleRefusedError('the takings are not in the currency this house sells in', {
+        reported: input.currency,
+        house: venue.boxOfficeCurrency,
+      });
+    }
+    if (input.admissions > venue.seats * 4) {
+      throw new RuleRefusedError('that is more admissions than the house could seat in a day', {
+        admissions: input.admissions,
+        seats: venue.seats,
+      });
+    }
+
+    const window = await RightsWindow.findById(booking.rightsWindow, null, { session });
+    const boxOffice = {
+      grossMinor: input.grossMinor,
+      currency: input.currency,
+      admissions: input.admissions,
+      houseNutMinor: input.houseNutMinor ?? venue.houseNutMinor,
+      reportedAt: new Date(),
+      reportedBy: input.reportedBy,
+    };
+
+    const royalty = computeRoyalty({ terms: window.terms, boxOffice });
+
+    booking.boxOffice = boxOffice;
+    booking.royaltyMinor = royalty.amountMinor;
+    booking.royaltyCurrency = royalty.currency;
+    booking.royaltyBasis = royalty.basis;
+    await booking.save({ session });
+
+    // The screening has happened, so the print has one more run on it.
+    await PrintElement.updateOne(
+      { _id: booking.element },
+      { $inc: { screeningsSinceInspection: 1 } },
+      { session },
+    );
+
+    await audit.record(
+      {
+        action: 'booking.box-office-reported',
+        subjectType: 'booking',
+        subjectId: booking.publicId,
+        metadata: {
+          grossMinor: boxOffice.grossMinor,
+          admissions: boxOffice.admissions,
+          royaltyMinor: royalty.amountMinor,
+          basis: royalty.basis,
+        },
+      },
+      { session },
+    );
+
+    return { booking, royalty };
+  });
+}
+
+/** Closes a booking once the money has been accounted for. */
+async function settleBooking(publicId, settledOn) {
+  return withTransaction(async (session) => {
+    const booking = await loadBooking(publicId, session);
+
+    if (booking.status !== 'confirmed') {
+      throw new RuleRefusedError('only a confirmed booking settles', {
+        booking: publicId,
+        status: booking.status,
+      });
+    }
+    if (!booking.boxOffice) {
+      throw new RuleRefusedError('the takings have not been reported yet', { booking: publicId });
+    }
+
+    booking.status = 'settled';
+    booking.settledOn = settledOn;
+    await booking.save({ session });
+
+    await audit.record(
+      {
+        action: 'booking.settled',
+        subjectType: 'booking',
+        subjectId: booking.publicId,
+        changes: [{ field: 'status', before: 'confirmed', after: 'settled' }],
+        metadata: { royaltyMinor: booking.royaltyMinor, settledOn },
+      },
+      { session },
+    );
+
+    return booking;
+  });
+}
+
+/** Bookings that have played but whose takings nobody has rung through. */
+async function awaitingBoxOffice(asOfLocalDate) {
+  const { Booking } = models();
+  return Booking.find({
+    status: 'confirmed',
+    boxOffice: null,
+    localDate: { $lt: asOfLocalDate },
+  }).sort({ localDate: 1 });
+}
+
 async function listBookings(query = {}) {
   const { Booking, Title, Venue, PrintElement } = models();
   const filter = {};
@@ -462,6 +586,9 @@ module.exports = {
   confirmBooking,
   cancelBooking,
   lapseExpiredHolds,
+  reportBoxOffice,
+  settleBooking,
+  awaitingBoxOffice,
   releaseBooking,
   getBooking,
   listBookings,

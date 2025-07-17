@@ -400,3 +400,160 @@ describe('moving a booking on', () => {
     expect(String(second.element._id)).toBe(String(element._id));
   });
 });
+
+describe('settling a booking', () => {
+  let holder;
+  let title;
+  let venue;
+  let vault;
+
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE', seats: 288, houseNutMinor: 42000 });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+    await makeRightsWindow({
+      title: title._id,
+      rightsHolder: holder._id,
+      terms: { kind: 'percentage', currency: 'GBP', percentageBps: 3500 },
+    });
+  });
+
+  async function confirmed() {
+    const { booking } = await service.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+    await service.confirmBooking(booking.publicId);
+    return booking;
+  }
+
+  const takings = (overrides = {}) => ({
+    grossMinor: 184000,
+    currency: 'GBP',
+    admissions: 210,
+    reportedBy: 'boxoffice@prince.test',
+    ...overrides,
+  });
+
+  it('works the royalty out from the licence terms', async () => {
+    const booking = await confirmed();
+
+    const { booking: updated, royalty } = await service.reportBoxOffice(booking.publicId, takings());
+
+    expect(royalty.amountMinor).toBe(64400);
+    expect(updated.royaltyMinor).toBe(64400);
+    expect(updated.royaltyBasis).toBe('35% of the gross');
+  });
+
+  it('defaults the house nut to what the house charges', async () => {
+    const { RightsWindow } = models();
+    await RightsWindow.updateMany(
+      {},
+      { $set: { terms: { kind: 'split-after-nut', currency: 'GBP', percentageBps: 5000, houseNutDeductible: true } } },
+    );
+    const booking = await confirmed();
+
+    const { royalty } = await service.reportBoxOffice(booking.publicId, takings());
+
+    expect(royalty.amountMinor).toBe(71000);
+  });
+
+  it('adds a run to the print', async () => {
+    const booking = await confirmed();
+    await service.reportBoxOffice(booking.publicId, takings());
+
+    const { PrintElement } = models();
+    const element = await PrintElement.findById(booking.element);
+    expect(element.screeningsSinceInspection).toBe(1);
+  });
+
+  it('refuses takings in another currency', async () => {
+    const booking = await confirmed();
+
+    await expect(
+      service.reportBoxOffice(booking.publicId, takings({ currency: 'EUR' })),
+    ).rejects.toThrow(/currency this house sells in/);
+  });
+
+  it('refuses more admissions than the house could ever seat', async () => {
+    const booking = await confirmed();
+
+    await expect(
+      service.reportBoxOffice(booking.publicId, takings({ admissions: 5000 })),
+    ).rejects.toThrow(/could seat in a day/);
+  });
+
+  it('refuses takings against a booking that is only held', async () => {
+    const { booking } = await service.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+
+    await expect(service.reportBoxOffice(booking.publicId, takings())).rejects.toThrow(
+      /confirmed booking/,
+    );
+  });
+
+  it('settles once the takings are in', async () => {
+    const booking = await confirmed();
+    await service.reportBoxOffice(booking.publicId, takings());
+
+    const settled = await service.settleBooking(booking.publicId, '2025-07-01');
+
+    expect(settled.status).toBe('settled');
+    expect(settled.settledOn).toBe('2025-07-01');
+  });
+
+  it('will not settle before the takings are reported', async () => {
+    const booking = await confirmed();
+
+    await expect(service.settleBooking(booking.publicId, '2025-07-01')).rejects.toThrow(
+      /have not been reported/,
+    );
+  });
+
+  it('will not report takings twice against a settled booking', async () => {
+    const booking = await confirmed();
+    await service.reportBoxOffice(booking.publicId, takings());
+    await service.settleBooking(booking.publicId, '2025-07-01');
+
+    await expect(service.reportBoxOffice(booking.publicId, takings())).rejects.toThrow(
+      /already settled/,
+    );
+  });
+
+  it('lists the screenings whose takings nobody has rung through', async () => {
+    const booking = await confirmed();
+
+    const waiting = await service.awaitingBoxOffice('2025-06-25');
+    expect(waiting.map((each) => each.publicId)).toEqual([booking.publicId]);
+
+    await service.reportBoxOffice(booking.publicId, takings());
+    expect(await service.awaitingBoxOffice('2025-06-25')).toHaveLength(0);
+  });
+});
