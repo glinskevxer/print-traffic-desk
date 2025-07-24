@@ -11,6 +11,7 @@ const { elementRoutes } = require('./routes/elements');
 const { inspectionRoutes } = require('./routes/inspections');
 const { rightsRoutes } = require('./routes/rights');
 const { shipmentRoutes } = require('./routes/shipments');
+const { bookingRoutes } = require('./routes/bookings');
 const { logger } = require('../lib/logger');
 const { version } = require('../../package.json');
 
@@ -38,6 +39,7 @@ function createApp({ log = null, bodyLimit = '256kb', exposeInternal = false } =
   app.use('/', inspectionRoutes());
   app.use('/', rightsRoutes());
   app.use('/shipments', shipmentRoutes());
+  app.use('/bookings', bookingRoutes());
 
   app.use(notFoundHandler());
   app.use(errorHandler({ exposeInternal }));
