@@ -1,8 +1,9 @@
 'use strict';
 
 const { models } = require('../models');
+const { required } = require('../db/lookup');
 const { withTransaction } = require('../db/connection');
-const { NotFoundError, ConflictError, RuleRefusedError } = require('../lib/errors');
+const { ConflictError, RuleRefusedError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
 const audit = require('../lib/audit');
 const { assertTerritory } = require('../domain/rights/territories');
@@ -13,8 +14,7 @@ const { localDateOf } = require('../lib/dates');
 
 async function getWindow(publicId, session = null) {
   const { RightsWindow } = models();
-  const window = await RightsWindow.byPublicId(publicId, { session });
-  if (!window) throw new NotFoundError('rights window', publicId);
+  const window = await required(RightsWindow, publicId, { session });
   return window;
 }
 
@@ -31,10 +31,8 @@ async function siblingWindows(window, session = null) {
 async function createWindow(input) {
   const { RightsWindow, Title, RightsHolder, Venue } = models();
 
-  const title = await Title.byPublicId(input.titleId);
-  if (!title) throw new NotFoundError('title', input.titleId);
-  const holder = await RightsHolder.byPublicId(input.rightsHolderId);
-  if (!holder) throw new NotFoundError('rights holder', input.rightsHolderId);
+  const title = await required(Title, input.titleId);
+  const holder = await required(RightsHolder, input.rightsHolderId);
 
   assertTerritory(input.territory);
   assertTermsComplete(input.terms);
@@ -48,8 +46,7 @@ async function createWindow(input) {
 
   let heldBy = null;
   if (input.exclusivity && input.exclusivity.scope !== 'none') {
-    const venue = await Venue.byPublicId(input.exclusivity.heldByVenueId);
-    if (!venue) throw new NotFoundError('venue', input.exclusivity.heldByVenueId);
+    const venue = await required(Venue, input.exclusivity.heldByVenueId);
     heldBy = venue._id;
   }
 
@@ -148,13 +145,11 @@ async function listWindows(query = {}) {
   const filter = {};
 
   if (query.titleId) {
-    const title = await Title.byPublicId(query.titleId);
-    if (!title) throw new NotFoundError('title', query.titleId);
+    const title = await required(Title, query.titleId);
     filter.title = title._id;
   }
   if (query.rightsHolderId) {
-    const holder = await RightsHolder.byPublicId(query.rightsHolderId);
-    if (!holder) throw new NotFoundError('rights holder', query.rightsHolderId);
+    const holder = await required(RightsHolder, query.rightsHolderId);
     filter.rightsHolder = holder._id;
   }
   if (query.status) filter.status = query.status;
@@ -183,8 +178,7 @@ async function clearScreeningRequest({ titleId, venue, localDate, exhibitionType
   screeningsAtVenue = 0 }) {
   const { RightsWindow, Title, Venue } = models();
 
-  const title = await Title.byPublicId(titleId);
-  if (!title) throw new NotFoundError('title', titleId);
+  const title = await required(Title, titleId);
 
   const windows = await RightsWindow.find({ title: title._id });
   const holderVenueIds = windows

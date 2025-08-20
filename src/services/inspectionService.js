@@ -1,6 +1,7 @@
 'use strict';
 
 const { models } = require('../models');
+const { required } = require('../db/lookup');
 const { withTransaction } = require('../db/connection');
 const { NotFoundError, RuleRefusedError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
@@ -12,8 +13,7 @@ const audit = require('../lib/audit');
 
 async function loadElement(publicId, session = null) {
   const { PrintElement } = models();
-  const element = await PrintElement.byPublicId(publicId, { session });
-  if (!element) throw new NotFoundError('print element', publicId);
+  const element = await required(PrintElement, publicId, { session });
   return element;
 }
 
@@ -132,8 +132,7 @@ async function recordInspection(elementPublicId, input) {
 
 async function getInspection(publicId) {
   const { InspectionReport } = models();
-  const report = await InspectionReport.byPublicId(publicId);
-  if (!report) throw new NotFoundError('inspection report', publicId);
+  const report = await required(InspectionReport, publicId);
   return report;
 }
 
@@ -142,8 +141,7 @@ async function listInspections(query = {}) {
   const filter = {};
 
   if (query.elementId) {
-    const element = await PrintElement.byPublicId(query.elementId);
-    if (!element) throw new NotFoundError('print element', query.elementId);
+    const element = await required(PrintElement, query.elementId);
     filter.element = element._id;
   }
   if (query.verdict) filter['assessment.verdict'] = query.verdict;

@@ -1,8 +1,9 @@
 'use strict';
 
 const { models } = require('../models');
+const { required } = require('../db/lookup');
 const { withTransaction } = require('../db/connection');
-const { NotFoundError, RuleRefusedError, ConflictError } = require('../lib/errors');
+const { RuleRefusedError, ConflictError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
 const audit = require('../lib/audit');
 const { assertTransition } = require('../domain/elements/status');
@@ -17,8 +18,7 @@ const {
 
 async function loadShipment(publicId, session = null) {
   const { Shipment } = models();
-  const shipment = await Shipment.byPublicId(publicId, { session });
-  if (!shipment) throw new NotFoundError('shipment', publicId);
+  const shipment = await required(Shipment, publicId, { session });
   return shipment;
 }
 
@@ -31,11 +31,9 @@ async function planLeg({ elementId, toVenueId, leg, screeningLocalDate, today, s
   const { PrintElement, Venue, Shipment } = models();
 
   return withTransaction(async (session) => {
-    const element = await PrintElement.byPublicId(elementId, { session });
-    if (!element) throw new NotFoundError('print element', elementId);
+    const element = await required(PrintElement, elementId, { session });
 
-    const destination = await Venue.byPublicId(toVenueId, { session });
-    if (!destination) throw new NotFoundError('venue', toVenueId);
+    const destination = await required(Venue, toVenueId, { session });
 
     const origin = await Venue.findById(element.currentLocation, null, { session });
     if (String(origin._id) === String(destination._id)) {
@@ -258,13 +256,11 @@ async function listShipments(query = {}) {
   const filter = {};
 
   if (query.elementId) {
-    const element = await PrintElement.byPublicId(query.elementId);
-    if (!element) throw new NotFoundError('print element', query.elementId);
+    const element = await required(PrintElement, query.elementId);
     filter.element = element._id;
   }
   if (query.venueId) {
-    const venue = await Venue.byPublicId(query.venueId);
-    if (!venue) throw new NotFoundError('venue', query.venueId);
+    const venue = await required(Venue, query.venueId);
     filter.$or = [{ fromVenue: venue._id }, { toVenue: venue._id }];
   }
   if (query.status) filter.status = query.status;
@@ -296,8 +292,7 @@ async function overdueArrivals(today) {
  */
 async function commitmentsFor(elementPublicId) {
   const { PrintElement, Shipment } = models();
-  const element = await PrintElement.byPublicId(elementPublicId);
-  if (!element) throw new NotFoundError('print element', elementPublicId);
+  const element = await required(PrintElement, elementPublicId);
 
   const shipments = await Shipment.find({ element: element._id }).sort({ plannedDispatchOn: 1 });
   return mergeSpans(spansFromShipments(shipments));

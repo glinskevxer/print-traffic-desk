@@ -1,8 +1,9 @@
 'use strict';
 
 const { models } = require('../models');
+const { required } = require('../db/lookup');
 const { withTransaction } = require('../db/connection');
-const { NotFoundError, RuleRefusedError, ConflictError } = require('../lib/errors');
+const { RuleRefusedError, ConflictError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
 const audit = require('../lib/audit');
 const { totalFor } = require('../domain/royalties/compute');
@@ -10,8 +11,7 @@ const { addDays } = require('../lib/dates');
 
 async function loadStatement(publicId, session = null) {
   const { RoyaltyStatement } = models();
-  const statement = await RoyaltyStatement.byPublicId(publicId, { session });
-  if (!statement) throw new NotFoundError('royalty statement', publicId);
+  const statement = await required(RoyaltyStatement, publicId, { session });
   return statement;
 }
 
@@ -69,8 +69,7 @@ async function buildStatement({ rightsHolderId, periodStartsOn, periodEndsOn }) 
   const { RightsHolder, RoyaltyStatement } = models();
 
   return withTransaction(async (session) => {
-    const holder = await RightsHolder.byPublicId(rightsHolderId, { session });
-    if (!holder) throw new NotFoundError('rights holder', rightsHolderId);
+    const holder = await required(RightsHolder, rightsHolderId, { session });
 
     const existing = await RoyaltyStatement.findOne(
       { rightsHolder: holder._id, periodStartsOn, periodEndsOn, status: { $ne: 'void' } },
@@ -217,8 +216,7 @@ async function listStatements(query = {}) {
   const filter = {};
 
   if (query.rightsHolderId) {
-    const holder = await RightsHolder.byPublicId(query.rightsHolderId);
-    if (!holder) throw new NotFoundError('rights holder', query.rightsHolderId);
+    const holder = await required(RightsHolder, query.rightsHolderId);
     filter.rightsHolder = holder._id;
   }
   if (query.status) filter.status = query.status;

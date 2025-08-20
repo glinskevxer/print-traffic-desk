@@ -1,8 +1,9 @@
 'use strict';
 
 const { models } = require('../models');
+const { required } = require('../db/lookup');
 const { withTransaction } = require('../db/connection');
-const { NotFoundError, RuleRefusedError, ConflictError } = require('../lib/errors');
+const { RuleRefusedError, ConflictError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
 const audit = require('../lib/audit');
 const { bookingReference } = require('../lib/ids');
@@ -18,8 +19,7 @@ const DEFAULT_HOLD_MINUTES = 2880;
 
 async function loadBooking(publicId, session = null) {
   const { Booking } = models();
-  const booking = await Booking.byPublicId(publicId, { session });
-  if (!booking) throw new NotFoundError('booking', publicId);
+  const booking = await required(Booking, publicId, { session });
   return booking;
 }
 
@@ -90,8 +90,7 @@ async function requestBooking(input) {
   const holdMinutes = input.holdMinutes || DEFAULT_HOLD_MINUTES;
 
   return withTransaction(async (session) => {
-    const title = await Title.byPublicId(input.titleId, { session });
-    if (!title) throw new NotFoundError('title', input.titleId);
+    const title = await required(Title, input.titleId, { session });
     if (title.status !== 'bookable') {
       throw new RuleRefusedError('this title is not bookable', {
         title: input.titleId,
@@ -99,8 +98,7 @@ async function requestBooking(input) {
       });
     }
 
-    const venue = await Venue.byPublicId(input.venueId, { session });
-    if (!venue) throw new NotFoundError('venue', input.venueId);
+    const venue = await required(Venue, input.venueId, { session });
     if (!venue.active) {
       throw new RuleRefusedError('this house is not taking bookings', { venue: input.venueId });
     }
@@ -553,18 +551,15 @@ async function listBookings(query = {}) {
   const filter = {};
 
   if (query.titleId) {
-    const title = await Title.byPublicId(query.titleId);
-    if (!title) throw new NotFoundError('title', query.titleId);
+    const title = await required(Title, query.titleId);
     filter.title = title._id;
   }
   if (query.venueId) {
-    const venue = await Venue.byPublicId(query.venueId);
-    if (!venue) throw new NotFoundError('venue', query.venueId);
+    const venue = await required(Venue, query.venueId);
     filter.venue = venue._id;
   }
   if (query.elementId) {
-    const element = await PrintElement.byPublicId(query.elementId);
-    if (!element) throw new NotFoundError('print element', query.elementId);
+    const element = await required(PrintElement, query.elementId);
     filter.element = element._id;
   }
   if (query.status) filter.status = query.status;

@@ -1,7 +1,8 @@
 'use strict';
 
 const { models } = require('../models');
-const { NotFoundError, ConflictError, RuleRefusedError } = require('../lib/errors');
+const { required } = require('../db/lookup');
+const { ConflictError, RuleRefusedError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
 
 function slugify(text) {
@@ -32,8 +33,7 @@ async function uniqueSlug(base) {
 async function createTitle(input) {
   const { Title, RightsHolder } = models();
 
-  const holder = await RightsHolder.byPublicId(input.rightsHolderId);
-  if (!holder) throw new NotFoundError('rights holder', input.rightsHolderId);
+  const holder = await required(RightsHolder, input.rightsHolderId);
   if (!holder.active) {
     throw new RuleRefusedError('that rights holder is no longer trading', {
       rightsHolder: holder.publicId,
@@ -52,8 +52,7 @@ async function createTitle(input) {
 
 async function getTitle(publicId) {
   const { Title } = models();
-  const title = await Title.byPublicId(publicId);
-  if (!title) throw new NotFoundError('title', publicId);
+  const title = await required(Title, publicId);
   return title;
 }
 
@@ -64,8 +63,7 @@ async function listTitles(query = {}) {
   if (query.status) filter.status = query.status;
   if (query.year) filter.year = query.year;
   if (query.rightsHolderId) {
-    const holder = await RightsHolder.byPublicId(query.rightsHolderId);
-    if (!holder) throw new NotFoundError('rights holder', query.rightsHolderId);
+    const holder = await required(RightsHolder, query.rightsHolderId);
     filter.rightsHolder = holder._id;
   }
   if (query.search) {

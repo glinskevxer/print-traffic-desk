@@ -1,7 +1,8 @@
 'use strict';
 
 const { models } = require('../models');
-const { NotFoundError, ConflictError, RuleRefusedError } = require('../lib/errors');
+const { required } = require('../db/lookup');
+const { ConflictError, RuleRefusedError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
 const { exponentFor } = require('../lib/money');
 
@@ -27,8 +28,7 @@ async function createRightsHolder(input) {
 
 async function getRightsHolder(publicId) {
   const { RightsHolder } = models();
-  const holder = await RightsHolder.byPublicId(publicId);
-  if (!holder) throw new NotFoundError('rights holder', publicId);
+  const holder = await required(RightsHolder, publicId);
   return holder;
 }
 

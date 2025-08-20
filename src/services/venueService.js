@@ -1,6 +1,7 @@
 'use strict';
 
 const { models } = require('../models');
+const { required } = require('../db/lookup');
 const { NotFoundError, ConflictError, RuleRefusedError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
 const { assertZone } = require('../lib/dates');
@@ -28,8 +29,7 @@ async function createVenue(input) {
 
 async function getVenue(publicId) {
   const { Venue } = models();
-  const venue = await Venue.byPublicId(publicId);
-  if (!venue) throw new NotFoundError('venue', publicId);
+  const venue = await required(Venue, publicId);
   return venue;
 }
 

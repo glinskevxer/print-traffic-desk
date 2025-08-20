@@ -1,6 +1,7 @@
 'use strict';
 
 const { models } = require('../models');
+const { required } = require('../db/lookup');
 const { withTransaction } = require('../db/connection');
 const { NotFoundError, ConflictError, RuleRefusedError } = require('../lib/errors');
 const { paginate } = require('../lib/pagination');
@@ -10,8 +11,7 @@ const audit = require('../lib/audit');
 
 async function getElement(publicId, session = null) {
   const { PrintElement } = models();
-  const element = await PrintElement.byPublicId(publicId, { session });
-  if (!element) throw new NotFoundError('print element', publicId);
+  const element = await required(PrintElement, publicId, { session });
   return element;
 }
 
@@ -25,12 +25,9 @@ async function getElementByBarcode(barcode) {
 async function catalogueElement(input) {
   const { PrintElement, Title, Venue, RightsHolder } = models();
 
-  const title = await Title.byPublicId(input.titleId);
-  if (!title) throw new NotFoundError('title', input.titleId);
-  const owner = await RightsHolder.byPublicId(input.ownerId);
-  if (!owner) throw new NotFoundError('rights holder', input.ownerId);
-  const custodian = await Venue.byPublicId(input.custodianId);
-  if (!custodian) throw new NotFoundError('venue', input.custodianId);
+  const title = await required(Title, input.titleId);
+  const owner = await required(RightsHolder, input.ownerId);
+  const custodian = await required(Venue, input.custodianId);
 
   if (input.baseStock === 'nitrate' && !custodian.booth.nitrateCertified) {
     throw new RuleRefusedError('nitrate cannot be held by a house without a certificate', {
@@ -62,13 +59,11 @@ async function listElements(query = {}) {
   const filter = {};
 
   if (query.titleId) {
-    const title = await Title.byPublicId(query.titleId);
-    if (!title) throw new NotFoundError('title', query.titleId);
+    const title = await required(Title, query.titleId);
     filter.title = title._id;
   }
   if (query.locationId) {
-    const venue = await Venue.byPublicId(query.locationId);
-    if (!venue) throw new NotFoundError('venue', query.locationId);
+    const venue = await required(Venue, query.locationId);
     filter.currentLocation = venue._id;
   }
   if (query.status) filter.status = query.status;
@@ -97,8 +92,7 @@ async function relocate(publicId, venuePublicId, reason) {
 
   return withTransaction(async (session) => {
     const element = await getElement(publicId, session);
-    const venue = await Venue.byPublicId(venuePublicId, { session });
-    if (!venue) throw new NotFoundError('venue', venuePublicId);
+    const venue = await required(Venue, venuePublicId, { session });
 
     if (isCommitted(element.status)) {
       throw new RuleRefusedError('this print is committed, cancel the booking before moving it', {
