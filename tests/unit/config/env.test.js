@@ -62,3 +62,48 @@ describe('parseEnv', () => {
     }).toThrow();
   });
 });
+
+describe('extraction settings', () => {
+  const base = { MONGO_URI: 'mongodb://127.0.0.1:27017/printdesk-test' };
+
+  it('is off unless the desk turns it on', () => {
+    const cfg = parseEnv(base);
+
+    expect(cfg.extraction.enabled).toBe(false);
+    expect(cfg.extraction.model).toBe('gpt-4o-mini');
+    expect(cfg.extraction.confidenceFloor).toBe(0.7);
+  });
+
+  it('will not turn extraction on without a key to call with', () => {
+    expect(() => parseEnv({ ...base, EXTRACTION_ENABLED: 'true' })).toThrow(/OPENAI_API_KEY/);
+  });
+
+  it('takes the key and the model when extraction is on', () => {
+    const cfg = parseEnv({
+      ...base,
+      EXTRACTION_ENABLED: 'true',
+      OPENAI_API_KEY: 'sk-test-000000000000000000',
+      OPENAI_MODEL: 'gpt-4o',
+      OPENAI_MAX_ATTEMPTS: '5',
+    });
+
+    expect(cfg.extraction.enabled).toBe(true);
+    expect(cfg.extraction.model).toBe('gpt-4o');
+    expect(cfg.extraction.maxAttempts).toBe(5);
+  });
+
+  it('refuses a key too short to be one', () => {
+    expect(() =>
+      parseEnv({ ...base, EXTRACTION_ENABLED: 'true', OPENAI_API_KEY: 'sk-1' }),
+    ).toThrow(/OPENAI_API_KEY/);
+  });
+
+  it('refuses a base url that is not a url', () => {
+    expect(() => parseEnv({ ...base, OPENAI_BASE_URL: 'not a url' })).toThrow(/OPENAI_BASE_URL/);
+  });
+
+  it('holds a daily token budget', () => {
+    expect(parseEnv({ ...base, EXTRACTION_DAILY_TOKEN_BUDGET: '1000' }).extraction.dailyTokenBudget)
+      .toBe(1000);
+  });
+});

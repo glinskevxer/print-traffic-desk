@@ -31,6 +31,20 @@ const schema = z.object({
   INSPECTION_INTERVAL_SCREENINGS: z.coerce.number().int().min(1).max(60).default(6),
 
   PRETTY_LOGS: bool.default(false),
+
+  // Extraction is optional. A desk with no key still books prints; it just
+  // types the licence terms in by hand.
+  EXTRACTION_ENABLED: bool.default(false),
+  OPENAI_API_KEY: z.string().min(20).optional(),
+  OPENAI_MODEL: z.string().min(3).max(60).default('gpt-4o-mini'),
+  OPENAI_BASE_URL: z.string().url().optional(),
+  OPENAI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
+  OPENAI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(6).default(3),
+  EXTRACTION_CONFIDENCE_FLOOR: z.coerce.number().min(0).max(1).default(0.7),
+  EXTRACTION_DAILY_TOKEN_BUDGET: z.coerce.number().int().min(0).default(400000),
+}).refine((env) => !env.EXTRACTION_ENABLED || Boolean(env.OPENAI_API_KEY), {
+  message: 'EXTRACTION_ENABLED needs OPENAI_API_KEY',
+  path: ['OPENAI_API_KEY'],
 });
 
 /**
@@ -66,6 +80,16 @@ function parseEnv(source = process.env) {
       defaultCurrency: env.DEFAULT_CURRENCY,
       holdTtlMinutes: env.HOLD_TTL_MINUTES,
       inspectionIntervalScreenings: env.INSPECTION_INTERVAL_SCREENINGS,
+    }),
+    extraction: Object.freeze({
+      enabled: env.EXTRACTION_ENABLED,
+      apiKey: env.OPENAI_API_KEY,
+      model: env.OPENAI_MODEL,
+      baseUrl: env.OPENAI_BASE_URL,
+      timeoutMs: env.OPENAI_TIMEOUT_MS,
+      maxAttempts: env.OPENAI_MAX_ATTEMPTS,
+      confidenceFloor: env.EXTRACTION_CONFIDENCE_FLOOR,
+      dailyTokenBudget: env.EXTRACTION_DAILY_TOKEN_BUDGET,
     }),
   });
 }
