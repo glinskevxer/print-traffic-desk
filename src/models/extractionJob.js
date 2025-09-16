@@ -48,7 +48,10 @@ const extractionJobSchema = new Schema({
   },
   inputLength: { type: Number, required: true, min: 0 },
 
+  // model is what was asked for and forms part of the cache key. resolvedModel
+  // is the dated build the API actually answered with, which is what is priced.
   model: { type: String, required: true, maxlength: 60 },
+  resolvedModel: { type: String, default: null, maxlength: 60 },
   promptVersion: { type: String, required: true, maxlength: 40 },
 
   status: { type: String, required: true, enum: JOB_STATUSES, default: 'queued' },

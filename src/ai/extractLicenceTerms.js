@@ -65,12 +65,16 @@ async function extractLicenceTerms({
 
   return {
     extracted: parsed.data,
+    // The cache key uses the model that was asked for, not the dated build the
+    // API answered with: two calls a fortnight apart get the same key and the
+    // second one costs nothing.
     fingerprint: fingerprint({
       contractText: text,
-      model: answer.model,
+      model: client.model,
       promptVersion: PROMPT_VERSION,
     }),
     promptVersion: PROMPT_VERSION,
+    requestedModel: client.model,
     model: answer.model,
     usage: answer.usage,
     elapsedMs: answer.elapsedMs,
