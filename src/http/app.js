@@ -13,6 +13,7 @@ const { rightsRoutes } = require('./routes/rights');
 const { shipmentRoutes } = require('./routes/shipments');
 const { bookingRoutes } = require('./routes/bookings');
 const { royaltyRoutes } = require('./routes/royalties');
+const { extractionRoutes } = require('./routes/extraction');
 const { logger } = require('../lib/logger');
 const { version } = require('../../package.json');
 
@@ -42,6 +43,7 @@ function createApp({ log = null, bodyLimit = '256kb', exposeInternal = false } =
   app.use('/shipments', shipmentRoutes());
   app.use('/bookings', bookingRoutes());
   app.use('/royalty-statements', royaltyRoutes());
+  app.use('/extractions', extractionRoutes());
 
   app.use(notFoundHandler());
   app.use(errorHandler({ exposeInternal }));
