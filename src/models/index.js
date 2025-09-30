@@ -15,6 +15,7 @@ const definitions = [
   require('./idempotencyRecord'),
   require('./royaltyStatement'),
   require('./extractionJob'),
+  require('./operator'),
 ];
 
 const registered = new WeakMap();
