@@ -42,10 +42,21 @@ const schema = z.object({
   OPENAI_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(6).default(3),
   EXTRACTION_CONFIDENCE_FLOOR: z.coerce.number().min(0).max(1).default(0.7),
   EXTRACTION_DAILY_TOKEN_BUDGET: z.coerce.number().int().min(0).default(400000),
-}).refine((env) => !env.EXTRACTION_ENABLED || Boolean(env.OPENAI_API_KEY), {
-  message: 'EXTRACTION_ENABLED needs OPENAI_API_KEY',
-  path: ['OPENAI_API_KEY'],
-});
+
+  AUTH_JWT_SECRET: z.string().min(32).optional(),
+  AUTH_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(480),
+  AUTH_MAX_FAILED_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
+  AUTH_LOCKOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+  AUTH_REQUIRED: bool.default(true),
+})
+  .refine((env) => !env.EXTRACTION_ENABLED || Boolean(env.OPENAI_API_KEY), {
+    message: 'EXTRACTION_ENABLED needs OPENAI_API_KEY',
+    path: ['OPENAI_API_KEY'],
+  })
+  .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.AUTH_JWT_SECRET), {
+    message: 'a production desk has to be given AUTH_JWT_SECRET',
+    path: ['AUTH_JWT_SECRET'],
+  });
 
 /**
  * Reads configuration once, from a plain object rather than process.env
@@ -80,6 +91,13 @@ function parseEnv(source = process.env) {
       defaultCurrency: env.DEFAULT_CURRENCY,
       holdTtlMinutes: env.HOLD_TTL_MINUTES,
       inspectionIntervalScreenings: env.INSPECTION_INTERVAL_SCREENINGS,
+    }),
+    auth: Object.freeze({
+      required: env.AUTH_REQUIRED,
+      secret: env.AUTH_JWT_SECRET,
+      tokenTtlMinutes: env.AUTH_TOKEN_TTL_MINUTES,
+      maxFailedAttempts: env.AUTH_MAX_FAILED_ATTEMPTS,
+      lockoutMinutes: env.AUTH_LOCKOUT_MINUTES,
     }),
     extraction: Object.freeze({
       enabled: env.EXTRACTION_ENABLED,
