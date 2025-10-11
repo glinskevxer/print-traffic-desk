@@ -55,7 +55,7 @@ const operatorSchema = new Schema({
   lockedUntil: { type: Date, default: null },
 });
 
-operatorSchema.plugin(basePlugin, { prefix: 'op' });
+operatorSchema.plugin(basePlugin, { prefix: 'op', hidden: ['passwordHash'] });
 operatorSchema.index({ email: 1 }, { unique: true });
 operatorSchema.index({ role: 1, active: 1 });
 

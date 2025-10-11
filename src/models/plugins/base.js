@@ -7,7 +7,7 @@ const { newId } = require('../../lib/ids');
  * leaves the process: booking references and element ids get printed on
  * despatch notes and quoted back over the phone.
  */
-function basePlugin(schema, { prefix }) {
+function basePlugin(schema, { prefix, hidden = [] }) {
   if (!prefix) throw new TypeError('basePlugin needs an id prefix');
 
   schema.add({
@@ -31,6 +31,9 @@ function basePlugin(schema, { prefix }) {
     transform(_doc, ret) {
       const { _id: mongoId, publicId, ...rest } = ret;
       void mongoId;
+      // A field marked hidden never leaves the process, whatever query loaded
+      // it. select:false only covers the query, not the serialisation.
+      for (const field of hidden) delete rest[field];
       return { id: publicId, ...rest };
     },
   });
