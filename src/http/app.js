@@ -4,6 +4,7 @@ const express = require('express');
 const { requestContext, requestLogging } = require('./middleware/requestContext');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');
+const { authRoutes } = require('./routes/auth');
 const { titleRoutes } = require('./routes/titles');
 const { venueRoutes } = require('./routes/venues');
 const { rightsHolderRoutes } = require('./routes/rightsHolders');
@@ -34,6 +35,7 @@ function createApp({ log = null, bodyLimit = '256kb', exposeInternal = false } =
   app.use(express.json({ limit: bodyLimit }));
 
   app.use('/health', healthRoutes({ version, startedAt }));
+  app.use('/auth', authRoutes());
   app.use('/titles', titleRoutes());
   app.use('/venues', venueRoutes());
   app.use('/rights-holders', rightsHolderRoutes());
