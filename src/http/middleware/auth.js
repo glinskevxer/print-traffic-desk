@@ -33,20 +33,23 @@ function authenticate({ optional = false } = {}) {
 }
 
 /**
- * Roles are ordered. An archivist can do everything a viewer can, which keeps
- * the route declarations to one role each rather than a list per endpoint.
+ * Roles are not a ladder. Traffic and programmer are peers who do different
+ * jobs, and an earlier ranking that let either cover the other let the traffic
+ * desk write licences. Each role says exactly what else it covers.
  */
-const RANK = Object.freeze({ viewer: 0, programmer: 1, traffic: 1, archivist: 2, admin: 3 });
+const COVERS = Object.freeze({
+  viewer: [],
+  programmer: ['viewer'],
+  traffic: ['viewer'],
+  archivist: ['viewer'],
+  admin: ['viewer', 'programmer', 'traffic', 'archivist'],
+});
 
 function outranks(role, needed) {
-  return (RANK[role] ?? -1) >= (RANK[needed] ?? 99);
+  return (COVERS[role] || []).includes(needed);
 }
 
-/**
- * Any of the named roles will do. Traffic and programmer sit at the same rank
- * and do different jobs, so a route that needs one names it rather than
- * relying on the ordering.
- */
+/** Any of the named roles will do, plus anything that covers one of them. */
 function requireRole(...allowed) {
   return function checkRole(req, _res, next) {
     if (!req.operator) return next(new NotAuthenticatedError('this desk needs an operator token'));
@@ -61,6 +64,14 @@ function requireRole(...allowed) {
         allowed,
       }),
     );
+  };
+}
+
+/** Every route past the sign in needs somebody signed in. */
+function requireOperator() {
+  return function checkOperator(req, _res, next) {
+    if (!req.operator) return next(new NotAuthenticatedError('this desk needs an operator token'));
+    return next();
   };
 }
 
@@ -85,4 +96,4 @@ function requireOwnVenue(pick) {
   };
 }
 
-module.exports = { authenticate, requireRole, requireOwnVenue, outranks, RANK };
+module.exports = { authenticate, requireOperator, requireRole, requireOwnVenue, outranks, COVERS };

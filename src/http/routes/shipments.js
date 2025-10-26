@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { publicId, listQuery, isoDate } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const { SERVICES } = require('../../domain/traffic/carriers');
@@ -58,6 +59,7 @@ function shipmentRoutes() {
 
   router.post(
     '/',
+    requireRole('traffic'),
     validate({ body: planBody }),
     asyncHandler(async (req, res) => {
       const { shipment, plan } = await service.planLeg({
@@ -102,6 +104,7 @@ function shipmentRoutes() {
 
   router.put(
     '/:shipmentId/dispatch',
+    requireRole('traffic'),
     validate({ params: shipmentParams, body: dispatchBody }),
     asyncHandler(async (req, res) => {
       const { shipment, element } = await service.dispatch(
@@ -114,6 +117,7 @@ function shipmentRoutes() {
 
   router.put(
     '/:shipmentId/arrival',
+    requireRole('traffic'),
     validate({ params: shipmentParams, body: arrivalBody }),
     asyncHandler(async (req, res) => {
       const { shipment, element } = await service.markArrived(
@@ -129,6 +133,7 @@ function shipmentRoutes() {
 
   router.put(
     '/:shipmentId/delay',
+    requireRole('traffic'),
     validate({ params: shipmentParams, body: z.object({ reason: z.string().min(3).max(2000) }) }),
     asyncHandler(async (req, res) => {
       const shipment = await service.markDelayed(
@@ -141,6 +146,7 @@ function shipmentRoutes() {
 
   router.put(
     '/:shipmentId/lost',
+    requireRole('traffic'),
     validate({
       params: shipmentParams,
       body: z.object({ reportedOn: isoDate, reason: z.string().min(3).max(2000) }),

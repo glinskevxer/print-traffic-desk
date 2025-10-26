@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { publicId, listQuery, isoDate } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const { toCsv, minorToDecimal } = require('../../lib/csv');
@@ -50,6 +51,7 @@ function royaltyRoutes() {
 
   router.post(
     '/',
+    requireRole('admin'),
     validate({ body: buildBody }),
     asyncHandler(async (req, res) => {
       const statement = await service.buildStatement(req.valid.body);
@@ -91,6 +93,7 @@ function royaltyRoutes() {
 
   router.put(
     '/:statementId/issue',
+    requireRole('admin'),
     validate({ params: statementParams, body: z.object({ issuedOn: isoDate }) }),
     asyncHandler(async (req, res) => {
       const statement = await service.issueStatement(
@@ -103,6 +106,7 @@ function royaltyRoutes() {
 
   router.put(
     '/:statementId/payment',
+    requireRole('admin'),
     validate({
       params: statementParams,
       body: z.object({ paidOn: isoDate, paymentReference: z.string().min(2).max(80).optional() }),
@@ -118,6 +122,7 @@ function royaltyRoutes() {
 
   router.delete(
     '/:statementId',
+    requireRole('admin'),
     validate({
       params: statementParams,
       body: z.object({ reason: z.string().min(3).max(400) }),

@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { publicId, listQuery, territory, currency, licenceTerritory } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const service = require('../../services/rightsHolderService');
@@ -51,6 +52,7 @@ function rightsHolderRoutes() {
 
   router.post(
     '/',
+    requireRole('admin'),
     validate({ body: createBody }),
     asyncHandler(async (req, res) => {
       const holder = await service.createRightsHolder(req.valid.body);
@@ -76,6 +78,7 @@ function rightsHolderRoutes() {
 
   router.patch(
     '/:holderId',
+    requireRole('admin'),
     validate({ params: holderParams, body: updateBody }),
     asyncHandler(async (req, res) => {
       const holder = await service.updateRightsHolder(req.valid.params.holderId, req.valid.body);
@@ -85,6 +88,7 @@ function rightsHolderRoutes() {
 
   router.put(
     '/:holderId/remittance-currency',
+    requireRole('admin'),
     validate({ params: holderParams, body: z.object({ currency }) }),
     asyncHandler(async (req, res) => {
       const holder = await service.setRemittanceCurrency(
@@ -97,6 +101,7 @@ function rightsHolderRoutes() {
 
   router.delete(
     '/:holderId',
+    requireRole('admin'),
     validate({ params: holderParams }),
     asyncHandler(async (req, res) => {
       const holder = await service.deactivate(req.valid.params.holderId);

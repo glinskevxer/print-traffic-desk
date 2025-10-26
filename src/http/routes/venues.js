@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { publicId, listQuery, territory, currency, venueCode } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const { GAUGES, SOUND_FORMATS, PROJECTION_SPEEDS } = require('../../domain/formats');
@@ -75,6 +76,7 @@ function venueRoutes() {
 
   router.post(
     '/',
+    requireRole('admin'),
     validate({ body: createBody }),
     asyncHandler(async (req, res) => {
       const venue = await venueService.createVenue(req.valid.body);
@@ -100,6 +102,7 @@ function venueRoutes() {
 
   router.patch(
     '/:venueId',
+    requireRole('admin'),
     validate({ params: venueParams, body: updateBody }),
     asyncHandler(async (req, res) => {
       const venue = await venueService.updateVenue(req.valid.params.venueId, req.valid.body);
@@ -109,6 +112,7 @@ function venueRoutes() {
 
   router.put(
     '/:venueId/booth',
+    requireRole('admin'),
     validate({ params: venueParams, body: boothSchema.partial() }),
     asyncHandler(async (req, res) => {
       const { venue, strandedElements } = await venueService.updateBooth(
@@ -121,6 +125,7 @@ function venueRoutes() {
 
   router.put(
     '/:venueId/active',
+    requireRole('admin'),
     validate({ params: venueParams, body: z.object({ active: z.boolean() }) }),
     asyncHandler(async (req, res) => {
       const venue = await venueService.setVenueActive(req.valid.params.venueId, req.valid.body.active);

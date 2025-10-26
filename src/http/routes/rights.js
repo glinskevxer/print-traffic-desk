@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const {
   publicId,
   listQuery,
@@ -95,6 +96,7 @@ function rightsRoutes() {
 
   router.post(
     '/rights-windows',
+    requireRole('programmer'),
     validate({ body: createBody }),
     asyncHandler(async (req, res) => {
       const window = await rightsService.createWindow(req.valid.body);
@@ -120,6 +122,7 @@ function rightsRoutes() {
 
   router.put(
     '/rights-windows/:windowId/activate',
+    requireRole('admin'),
     validate({ params: windowParams }),
     asyncHandler(async (req, res) => {
       res.json((await rightsService.activateWindow(req.valid.params.windowId)).toJSON());
@@ -128,6 +131,7 @@ function rightsRoutes() {
 
   router.put(
     '/rights-windows/:windowId/suspend',
+    requireRole('admin'),
     validate({ params: windowParams, body: z.object({ reason: z.string().min(3).max(400) }) }),
     asyncHandler(async (req, res) => {
       const window = await rightsService.suspendWindow(

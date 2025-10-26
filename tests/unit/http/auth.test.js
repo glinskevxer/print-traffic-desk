@@ -1,6 +1,11 @@
 'use strict';
 
-const { requireRole, requireOwnVenue, outranks } = require('../../../src/http/middleware/auth');
+const {
+  requireRole,
+  requireOwnVenue,
+  requireOperator,
+  outranks,
+} = require('../../../src/http/middleware/auth');
 const { ForbiddenError, NotAuthenticatedError } = require('../../../src/lib/errors');
 
 function run(middleware, req) {
@@ -19,19 +24,33 @@ const operator = (overrides = {}) => ({
 });
 
 describe('who is allowed to do what', () => {
-  it('ranks the roles so a senior one covers a junior one', () => {
+  it('says exactly what each role covers, and no more', () => {
     expect(outranks('admin', 'viewer')).toBe(true);
-    expect(outranks('archivist', 'programmer')).toBe(true);
+    expect(outranks('admin', 'archivist')).toBe(true);
+    expect(outranks('archivist', 'viewer')).toBe(true);
     expect(outranks('viewer', 'programmer')).toBe(false);
-    expect(outranks('programmer', 'traffic')).toBe(true);
+  });
+
+  it('does not let two peer roles cover each other', () => {
+    expect(outranks('traffic', 'programmer')).toBe(false);
+    expect(outranks('programmer', 'traffic')).toBe(false);
+    expect(outranks('archivist', 'programmer')).toBe(false);
+  });
+
+  it('needs somebody signed in for anything past the sign in', async () => {
+    expect(await run(requireOperator(), { operator: operator() })).toBeUndefined();
+    expect(await run(requireOperator(), {})).toBeInstanceOf(NotAuthenticatedError);
   });
 
   it('lets a role through when it is named', async () => {
     expect(await run(requireRole('traffic'), { operator: operator({ role: 'traffic' }) })).toBeUndefined();
   });
 
-  it('lets a senior role through a junior gate', async () => {
+  it('lets a role through a gate it covers', async () => {
     expect(await run(requireRole('viewer'), { operator: operator({ role: 'admin' }) })).toBeUndefined();
+    expect(
+      await run(requireRole('viewer'), { operator: operator({ role: 'archivist' }) }),
+    ).toBeUndefined();
   });
 
   it('turns a junior role away and says what was needed', async () => {

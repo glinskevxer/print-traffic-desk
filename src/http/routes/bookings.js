@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { idempotency } = require('../middleware/idempotency');
 const {
   publicId,
@@ -61,6 +62,7 @@ function bookingRoutes() {
 
   router.post(
     '/',
+    requireRole('programmer'),
     idempotency(),
     validate({ body: requestBody }),
     asyncHandler(async (req, res) => {
@@ -111,6 +113,7 @@ function bookingRoutes() {
 
   router.put(
     '/:bookingId/confirm',
+    requireRole('programmer'),
     validate({
       params: bookingParams,
       body: z.object({ confirmedBy: z.string().min(3).max(160).optional() }).default({}),
@@ -129,6 +132,7 @@ function bookingRoutes() {
 
   router.put(
     '/:bookingId/box-office',
+    requireRole('programmer'),
     validate({ params: bookingParams, body: boxOfficeBody }),
     asyncHandler(async (req, res) => {
       const { booking, royalty } = await service.reportBoxOffice(
@@ -141,6 +145,7 @@ function bookingRoutes() {
 
   router.put(
     '/:bookingId/settle',
+    requireRole('admin'),
     validate({ params: bookingParams, body: z.object({ settledOn: isoDate }) }),
     asyncHandler(async (req, res) => {
       const booking = await service.settleBooking(
@@ -153,6 +158,7 @@ function bookingRoutes() {
 
   router.delete(
     '/:bookingId',
+    requireRole('programmer'),
     validate({
       params: bookingParams,
       body: z.object({ reason: z.string().min(3).max(400), feeMinor: minorAmount.optional() }),

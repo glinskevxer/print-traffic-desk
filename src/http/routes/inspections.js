@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { publicId, listQuery } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const { ALL_CODES, SEVERITIES } = require('../../domain/condition/damageCodes');
@@ -55,6 +56,7 @@ function inspectionRoutes() {
 
   router.post(
     '/elements/:elementId/inspections',
+    requireRole('archivist'),
     validate({ params: z.object({ elementId: publicId('elem') }), body: recordBody }),
     asyncHandler(async (req, res) => {
       const { report, element, assessment } = await service.recordInspection(

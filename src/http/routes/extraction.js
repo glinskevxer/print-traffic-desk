@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { idempotency } = require('../middleware/idempotency');
 const { publicId, listQuery } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
@@ -60,6 +61,7 @@ function extractionRoutes() {
 
   router.post(
     '/licence-letters',
+    requireRole('programmer'),
     idempotency(),
     validate({ body: readLetterBody }),
     asyncHandler(async (req, res) => {
@@ -70,6 +72,7 @@ function extractionRoutes() {
 
   router.post(
     '/bench-notes',
+    requireRole('archivist'),
     idempotency(),
     validate({ body: readNoteBody }),
     asyncHandler(async (req, res) => {
@@ -113,6 +116,7 @@ function extractionRoutes() {
 
   router.put(
     '/:jobId/apply',
+    requireRole('admin'),
     validate({
       params: jobParams,
       body: z.object({
@@ -139,6 +143,7 @@ function extractionRoutes() {
 
   router.put(
     '/:jobId/reject',
+    requireRole('programmer'),
     validate({
       params: jobParams,
       body: z.object({

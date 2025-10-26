@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { requestContext, requestLogging } = require('./middleware/requestContext');
+const { authenticate, requireOperator } = require('./middleware/auth');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');
 const { authRoutes } = require('./routes/auth');
@@ -19,10 +20,16 @@ const { logger } = require('../lib/logger');
 const { version } = require('../../package.json');
 
 /**
- * The app is built, not imported as a singleton, so a test can hand in its own
- * logger and a fake clock without reaching into module state.
+ * The app is built, not imported as a singleton. authenticateWith is injected
+ * so a test can hand in a known operator instead of signing one in for every
+ * request; the real middleware is covered by its own tests.
  */
-function createApp({ log = null, bodyLimit = '256kb', exposeInternal = false } = {}) {
+function createApp({
+  log = null,
+  bodyLimit = '256kb',
+  exposeInternal = false,
+  authenticateWith = authenticate(),
+} = {}) {
   const app = express();
   const startedAt = Date.now();
 
@@ -36,6 +43,11 @@ function createApp({ log = null, bodyLimit = '256kb', exposeInternal = false } =
 
   app.use('/health', healthRoutes({ version, startedAt }));
   app.use('/auth', authRoutes());
+
+  // Everything past here needs an operator. Health and sign in do not.
+  app.use(authenticateWith);
+  app.use(requireOperator());
+
   app.use('/titles', titleRoutes());
   app.use('/venues', venueRoutes());
   app.use('/rights-holders', rightsHolderRoutes());

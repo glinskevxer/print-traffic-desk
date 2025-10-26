@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { publicId, listQuery, barcode, isoDate, currency } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const {
@@ -67,6 +68,7 @@ function elementRoutes() {
 
   router.post(
     '/',
+    requireRole('archivist'),
     validate({ body: createBody }),
     asyncHandler(async (req, res) => {
       const element = await elementService.catalogueElement(req.valid.body);
@@ -92,6 +94,7 @@ function elementRoutes() {
 
   router.put(
     '/:elementId/location',
+    requireRole('archivist'),
     validate({
       params: elementParams,
       body: z.object({ venueId: publicId('ven'), reason: z.string().max(400).optional() }),
@@ -108,6 +111,7 @@ function elementRoutes() {
 
   router.put(
     '/:elementId/status',
+    requireRole('archivist'),
     validate({
       params: elementParams,
       body: z.object({ status: z.enum(STATUSES), reason: z.string().max(400).optional() }),

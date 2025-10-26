@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
+const { requireRole } = require('../middleware/auth');
 const { publicId, listQuery } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const titleService = require('../../services/titleService');
@@ -49,6 +50,7 @@ function titleRoutes() {
 
   router.post(
     '/',
+    requireRole('programmer'),
     validate({ body: createBody }),
     asyncHandler(async (req, res) => {
       const title = await titleService.createTitle(req.valid.body);
@@ -76,6 +78,7 @@ function titleRoutes() {
 
   router.patch(
     '/:titleId',
+    requireRole('programmer'),
     validate({ params: z.object({ titleId: publicId('ttl') }), body: updateBody }),
     asyncHandler(async (req, res) => {
       const title = await titleService.updateTitle(req.valid.params.titleId, req.valid.body);
@@ -85,6 +88,7 @@ function titleRoutes() {
 
   router.put(
     '/:titleId/status',
+    requireRole('programmer'),
     validate({ params: z.object({ titleId: publicId('ttl') }), body: statusBody }),
     asyncHandler(async (req, res) => {
       const { status, reason } = req.valid.body;
