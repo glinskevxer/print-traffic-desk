@@ -3,6 +3,11 @@
 const express = require('express');
 const { requestContext, requestLogging } = require('./middleware/requestContext');
 const { authenticate, requireOperator } = require('./middleware/auth');
+const {
+  securityHeaders,
+  crossOrigin,
+  rejectMongoOperators,
+} = require('./middleware/security');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');
 const { authRoutes } = require('./routes/auth');
@@ -29,6 +34,7 @@ function createApp({
   bodyLimit = '256kb',
   exposeInternal = false,
   authenticateWith = authenticate(),
+  allowedOrigins = [],
 } = {}) {
   const app = express();
   const startedAt = Date.now();
@@ -37,9 +43,14 @@ function createApp({
   app.set('trust proxy', true);
   app.set('etag', false);
 
+  app.use(securityHeaders());
+  // The origin check runs after the request context, because refusing an
+  // origin raises a desk error and the error handler logs against req.log.
   app.use(requestContext({ logger: log || logger() }));
   app.use(requestLogging());
+  app.use(crossOrigin(allowedOrigins));
   app.use(express.json({ limit: bodyLimit }));
+  app.use(rejectMongoOperators());
 
   app.use('/health', healthRoutes({ version, startedAt }));
   app.use('/auth', authRoutes());

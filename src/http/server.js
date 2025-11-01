@@ -13,7 +13,11 @@ async function start() {
   const connection = await connect(cfg.mongo, log);
   registerModels(connection);
 
-  const app = createApp({ log, exposeInternal: !cfg.isProduction });
+  const app = createApp({
+    log,
+    exposeInternal: !cfg.isProduction,
+    allowedOrigins: cfg.http.allowedOrigins,
+  });
   const server = app.listen(cfg.http.port, () => {
     log.info({ port: cfg.http.port, env: cfg.nodeEnv }, 'print desk listening');
   });

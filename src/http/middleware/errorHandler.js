@@ -1,6 +1,7 @@
 'use strict';
 
 const { DeskError, NotFoundError, isDeskError } = require('../../lib/errors');
+const { logger } = require('../../lib/logger');
 
 /** Anything that reaches here matched no route. */
 function notFoundHandler() {
@@ -25,8 +26,12 @@ function isBodyTooLarge(err) {
 // eslint-disable-next-line no-unused-vars
 function errorHandler({ exposeInternal = false } = {}) {
   return function handleError(err, req, res, next) {
+    // A failure before the context middleware has no request logger. That is
+    // rare and it is exactly when the log line matters most, so fall back.
+    const log = req.log || logger();
+
     if (res.headersSent) {
-      req.log.error({ err }, 'error after the response started');
+      log.error({ err }, 'error after the response started');
       return next(err);
     }
 
@@ -45,12 +50,12 @@ function errorHandler({ exposeInternal = false } = {}) {
 
     if (isDeskError(desk)) {
       const level = desk.status >= 500 ? 'error' : 'warn';
-      req.log[level]({ err: desk }, 'request refused');
+      log[level]({ err: desk }, 'request refused');
       if (desk.retryAfterSeconds) res.set('retry-after', String(desk.retryAfterSeconds));
       return res.status(desk.status).json(desk.toPayload());
     }
 
-    req.log.error({ err }, 'unhandled error');
+    log.error({ err }, 'unhandled error');
     return res.status(500).json({
       error: {
         code: 'internal_error',

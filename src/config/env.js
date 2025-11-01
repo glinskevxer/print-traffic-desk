@@ -48,6 +48,7 @@ const schema = z.object({
   AUTH_MAX_FAILED_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
   AUTH_LOCKOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   AUTH_REQUIRED: bool.default(true),
+  ALLOWED_ORIGINS: z.string().default(''),
 })
   .refine((env) => !env.EXTRACTION_ENABLED || Boolean(env.OPENAI_API_KEY), {
     message: 'EXTRACTION_ENABLED needs OPENAI_API_KEY',
@@ -79,7 +80,10 @@ function parseEnv(source = process.env) {
     isProduction: env.NODE_ENV === 'production',
     isTest: env.NODE_ENV === 'test',
     serviceName: env.SERVICE_NAME,
-    http: Object.freeze({ port: env.PORT }),
+    http: Object.freeze({
+      port: env.PORT,
+      allowedOrigins: env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),
+    }),
     logging: Object.freeze({ level: env.LOG_LEVEL, pretty: env.PRETTY_LOGS }),
     mongo: Object.freeze({
       uri: env.MONGO_URI,
