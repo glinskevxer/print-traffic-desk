@@ -8,6 +8,7 @@ const {
   crossOrigin,
   rejectMongoOperators,
 } = require('./middleware/security');
+const { rateLimit } = require('./middleware/rateLimit');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');
 const { authRoutes } = require('./routes/auth');
@@ -35,6 +36,7 @@ function createApp({
   exposeInternal = false,
   authenticateWith = authenticate(),
   allowedOrigins = [],
+  limits = null,
 } = {}) {
   const app = express();
   const startedAt = Date.now();
@@ -53,11 +55,20 @@ function createApp({
   app.use(rejectMongoOperators());
 
   app.use('/health', healthRoutes({ version, startedAt }));
+  if (limits) {
+    // Sign in is limited far harder than the rest, and by address rather than
+    // by operator, because the caller has not proved who they are yet.
+    app.use(
+      '/auth/sign-in',
+      rateLimit({ windowMs: limits.windowMs, max: limits.signInMax, scope: 'sign-in' }),
+    );
+  }
   app.use('/auth', authRoutes());
 
   // Everything past here needs an operator. Health and sign in do not.
   app.use(authenticateWith);
   app.use(requireOperator());
+  if (limits) app.use(rateLimit({ windowMs: limits.windowMs, max: limits.max }));
 
   app.use('/titles', titleRoutes());
   app.use('/venues', venueRoutes());

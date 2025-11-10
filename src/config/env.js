@@ -49,6 +49,9 @@ const schema = z.object({
   AUTH_LOCKOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   AUTH_REQUIRED: bool.default(true),
   ALLOWED_ORIGINS: z.string().default(''),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).max(3600000).default(60000),
+  RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100000).default(120),
+  RATE_LIMIT_SIGN_IN_MAX: z.coerce.number().int().min(1).max(1000).default(10),
 })
   .refine((env) => !env.EXTRACTION_ENABLED || Boolean(env.OPENAI_API_KEY), {
     message: 'EXTRACTION_ENABLED needs OPENAI_API_KEY',
@@ -80,6 +83,11 @@ function parseEnv(source = process.env) {
     isProduction: env.NODE_ENV === 'production',
     isTest: env.NODE_ENV === 'test',
     serviceName: env.SERVICE_NAME,
+    rateLimit: Object.freeze({
+      windowMs: env.RATE_LIMIT_WINDOW_MS,
+      max: env.RATE_LIMIT_MAX,
+      signInMax: env.RATE_LIMIT_SIGN_IN_MAX,
+    }),
     http: Object.freeze({
       port: env.PORT,
       allowedOrigins: env.ALLOWED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean),

@@ -16,6 +16,7 @@ const definitions = [
   require('./royaltyStatement'),
   require('./extractionJob'),
   require('./operator'),
+  require('./rateCounter'),
 ];
 
 const registered = new WeakMap();

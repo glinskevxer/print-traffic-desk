@@ -17,6 +17,7 @@ async function start() {
     log,
     exposeInternal: !cfg.isProduction,
     allowedOrigins: cfg.http.allowedOrigins,
+    limits: cfg.rateLimit,
   });
   const server = app.listen(cfg.http.port, () => {
     log.info({ port: cfg.http.port, env: cfg.nodeEnv }, 'print desk listening');
