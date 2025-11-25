@@ -14,7 +14,9 @@
     "test:unit": "jest --selectProjects unit",
     "lint": "eslint src tests",
     "test:integration": "jest --selectProjects integration",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "cli": "node src/cli/index.js",
+    "seed": "node src/cli/index.js seed"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -35,5 +37,8 @@
     "pino-pretty": "^13.0.0",
     "supertest": "^7.0.0"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "bin": {
+    "printdesk": "src/cli/index.js"
+  }
 }
