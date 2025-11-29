@@ -15,6 +15,7 @@ const { isDeskError } = require('../lib/errors');
  */
 
 const COMMANDS = [
+  require('./commands/migrate'),
   require('./commands/seed'),
   require('./commands/reindex'),
   require('./commands/lapseHolds'),

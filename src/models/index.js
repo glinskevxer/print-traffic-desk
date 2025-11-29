@@ -17,6 +17,7 @@ const definitions = [
   require('./extractionJob'),
   require('./operator'),
   require('./rateCounter'),
+  require('./migration'),
 ];
 
 const registered = new WeakMap();
