@@ -1,0 +1,80 @@
+name: printdesk
+
+services:
+  mongo:
+    image: mongo:7.0.16
+    # The desk books prints in a transaction, and a standalone mongod refuses
+    # to start one, so even the development database is a one node replica set.
+    command: ["--replSet", "printdesk", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: >
+        mongosh --quiet --eval
+        "try { rs.status().ok } catch (e) { rs.initiate({_id:'printdesk',members:[{_id:0,host:'mongo:27017'}]}).ok }"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  desk:
+    build:
+      context: .
+      target: runtime
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "4010"
+      LOG_LEVEL: info
+      MONGO_URI: mongodb://mongo:27017/printdesk?replicaSet=printdesk
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-a-development-secret-that-is-long-enough}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      EXTRACTION_ENABLED: ${EXTRACTION_ENABLED:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "4010:4010"
+    restart: unless-stopped
+
+  # Runs once, then exits. Compose keeps it out of `up` unless asked for by
+  # profile, so a normal start does not wait on it.
+  migrate:
+    build:
+      context: .
+      target: runtime
+    profiles: ["setup"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/printdesk?replicaSet=printdesk
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-a-development-secret-that-is-long-enough}
+    command: ["node", "src/cli/index.js", "migrate"]
+
+  seed:
+    build:
+      context: .
+      target: runtime
+    profiles: ["setup"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/printdesk?replicaSet=printdesk
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-a-development-secret-that-is-long-enough}
+    command:
+      - node
+      - src/cli/index.js
+      - seed
+      - --adminEmail
+      - ${SEED_ADMIN_EMAIL:-desk@archive.test}
+      - --adminPassword
+      - ${SEED_ADMIN_PASSWORD:-a-development-password}
+
+volumes:
+  mongo-data:
