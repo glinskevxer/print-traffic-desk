@@ -259,7 +259,7 @@ async function getBooking(publicId) {
  * behind for somebody to act on.
  */
 async function confirmBooking(publicId, { confirmedBy } = {}) {
-  const { Booking, Shipment, PrintElement, Venue } = models();
+  const { Shipment, PrintElement, Venue } = models();
 
   return withTransaction(async (session) => {
     const booking = await loadBooking(publicId, session);
@@ -429,7 +429,7 @@ async function lapseExpiredHolds(now = new Date()) {
  * same number the venue was told on the phone.
  */
 async function reportBoxOffice(publicId, input) {
-  const { Booking, Venue, RightsWindow, PrintElement } = models();
+  const { Venue, RightsWindow, PrintElement } = models();
 
   return withTransaction(async (session) => {
     const booking = await loadBooking(publicId, session);

@@ -130,7 +130,7 @@ let cached = null;
 function config() {
   if (cached) return cached;
   if (process.env.NODE_ENV !== 'test') {
-    // eslint-disable-next-line global-require
+     
     require('dotenv').config();
   }
   cached = parseEnv(process.env);

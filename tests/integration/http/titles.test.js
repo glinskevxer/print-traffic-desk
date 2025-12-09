@@ -60,7 +60,7 @@ describe('title endpoints', () => {
   });
 
   it('refuses a body that is missing the rights holder', async () => {
-    const { rightsHolderId, ...withoutHolder } = body();
+    const { rightsHolderId: _dropped, ...withoutHolder } = body();
 
     const res = await request(app).post('/titles').send(withoutHolder).expect(400);
 
@@ -122,7 +122,7 @@ describe('title endpoints', () => {
 
   it('pages the catalogue with a cursor', async () => {
     for (const slug of ['a-one', 'b-two', 'c-three']) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await makeTitle({ slug, rightsHolder: holder._id });
     }
 

@@ -21,7 +21,7 @@ describe('paging a collection', () => {
     await clearCollections();
     holderId = (await makeRightsHolder())._id;
     for (const slug of ['a-nos-amours', 'black-narcissus', 'celine-and-julie', 'daisies', 'el-sur']) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await makeTitle({ slug, rightsHolder: holderId });
     }
   });
@@ -32,7 +32,7 @@ describe('paging a collection', () => {
     let guard = 0;
 
     do {
-      // eslint-disable-next-line no-await-in-loop
+       
       const page = await paginate(Title, { sortField: 'slug', limit: 2, cursor });
       seen.push(...page.items.map((item) => item.slug));
       cursor = page.nextCursor;
@@ -76,14 +76,14 @@ describe('paging a collection', () => {
     await clearCollections();
     const holder = await makeRightsHolder();
     for (let i = 0; i < 6; i += 1) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await makeTitle({ slug: `tie-${i}`, year: 1948, rightsHolder: holder._id });
     }
 
     const seen = [];
     let cursor;
     do {
-      // eslint-disable-next-line no-await-in-loop
+       
       const page = await paginate(Title, { sortField: 'year', limit: 2, cursor });
       seen.push(...page.items.map((item) => item.slug));
       cursor = page.nextCursor;

@@ -34,14 +34,19 @@ function problemsWith(terms) {
   if (terms.kind === 'flat' && terms.percentageBps) {
     problems.push('a flat deal cannot also carry a percentage');
   }
-  if (isPresent(terms.capMinor) && isPresent(terms.flatFeeMinor) && terms.flatFeeMinor > terms.capMinor) {
+  problems.push(...capProblems(terms));
+  return problems;
+}
+
+/** A cap below a figure the deal guarantees is a deal that cannot be settled. */
+function capProblems(terms) {
+  if (!isPresent(terms.capMinor)) return [];
+  const problems = [];
+
+  if (isPresent(terms.flatFeeMinor) && terms.flatFeeMinor > terms.capMinor) {
     problems.push('the flat fee is already above the cap');
   }
-  if (
-    isPresent(terms.capMinor) &&
-    isPresent(terms.minimumGuaranteeMinor) &&
-    terms.minimumGuaranteeMinor > terms.capMinor
-  ) {
+  if (isPresent(terms.minimumGuaranteeMinor) && terms.minimumGuaranteeMinor > terms.capMinor) {
     problems.push('the minimum guarantee is above the cap');
   }
   return problems;

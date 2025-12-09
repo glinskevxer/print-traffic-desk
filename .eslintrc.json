@@ -1,0 +1,41 @@
+{
+  "root": true,
+  "env": { "node": true, "es2022": true },
+  "parserOptions": { "ecmaVersion": 2022, "sourceType": "script" },
+  "extends": ["eslint:recommended", "prettier"],
+  "plugins": ["jest"],
+  "reportUnusedDisableDirectives": true,
+  "rules": {
+    "strict": ["error", "global"],
+    "no-console": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "eqeqeq": ["error", "smart"],
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-await-in-loop": "warn",
+    "no-return-await": "error",
+    "require-atomic-updates": "off",
+    "consistent-return": "off",
+    "no-param-reassign": ["error", { "props": false }],
+    "no-underscore-dangle": "off",
+    "camelcase": ["error", { "properties": "never", "allow": ["prompt_tokens", "completion_tokens", "response_format", "max_tokens", "finish_reason"] }],
+    "max-depth": ["warn", 4],
+    "complexity": ["warn", 14]
+  },
+  "overrides": [
+    {
+      "files": ["src/cli/**/*.js", "scripts/**/*.js"],
+      "rules": { "no-console": "off", "global-require": "off" }
+    },
+    {
+      "files": ["tests/**/*.js"],
+      "env": { "jest": true },
+      "extends": ["plugin:jest/recommended"],
+      "rules": {
+        "jest/expect-expect": ["error", { "assertFunctionNames": ["expect", "request.**.expect"] }],
+        "jest/no-conditional-expect": "off",
+        "no-await-in-loop": "off"
+      }
+    }
+  ]
+}

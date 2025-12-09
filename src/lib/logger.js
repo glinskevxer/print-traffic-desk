@@ -56,7 +56,7 @@ let rootLogger = null;
 
 function logger() {
   if (!rootLogger) {
-    // eslint-disable-next-line global-require
+     
     const { config } = require('../config/env');
     const cfg = config();
     rootLogger = createLogger({

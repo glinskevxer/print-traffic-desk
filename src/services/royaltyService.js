@@ -96,7 +96,7 @@ async function buildStatement({ rightsHolderId, periodStartsOn, periodEndsOn }) 
           periodStartsOn,
           periodEndsOn,
           currency: holder.remittanceCurrency,
-          lines: lines.map(({ currency, ...line }) => line),
+          lines: lines.map(({ currency: _currency, ...line }) => line),
           totalMinor,
           screeningCount: lines.length,
           admissionsTotal: lines.reduce((sum, line) => sum + line.admissions, 0),

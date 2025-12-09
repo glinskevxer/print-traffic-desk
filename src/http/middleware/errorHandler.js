@@ -23,7 +23,7 @@ function isBodyTooLarge(err) {
  * defect, so it is logged with its stack and answered with a bare 500 rather
  * than leaking the message.
  */
-// eslint-disable-next-line no-unused-vars
+ 
 function errorHandler({ exposeInternal = false } = {}) {
   return function handleError(err, req, res, next) {
     // A failure before the context middleware has no request logger. That is

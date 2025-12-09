@@ -22,7 +22,7 @@ function loadMigrations(directory = MIGRATIONS_DIR) {
     .sort();
 
   const loaded = files.map((file) => {
-    // eslint-disable-next-line global-require, import/no-dynamic-require
+     
     const migration = require(path.join(directory, file));
     if (!migration.id || typeof migration.up !== 'function') {
       throw new DeskError(`${file} is not a migration`, { code: CODES.CONFIG_INVALID, status: 500 });

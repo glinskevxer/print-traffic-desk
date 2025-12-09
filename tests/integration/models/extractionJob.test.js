@@ -1,7 +1,6 @@
 'use strict';
 
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { models } = require('../../../src/models');
 const { makeTitle } = require('../../helpers/factories');
 
 describe('extraction job model', () => {

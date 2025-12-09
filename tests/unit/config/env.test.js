@@ -56,10 +56,7 @@ describe('parseEnv', () => {
 
     expect(Object.isFrozen(cfg)).toBe(true);
     expect(Object.isFrozen(cfg.desk)).toBe(true);
-    expect(() => {
-      'use strict';
-      cfg.desk.holdTtlMinutes = 1;
-    }).toThrow();
+    expect(() => Object.assign(cfg.desk, { holdTtlMinutes: 1 })).toThrow();
   });
 });
 

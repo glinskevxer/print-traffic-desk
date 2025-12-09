@@ -102,7 +102,7 @@ describe('signing an operator in', () => {
     await service.createOperator(account());
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await expect(
         service.signIn({ email: 'traffic@archive.test', password: 'wrong-password-here' }),
       ).rejects.toThrow(NotAuthenticatedError);
@@ -116,7 +116,7 @@ describe('signing an operator in', () => {
   it('lets the operator back in once the lockout runs out', async () => {
     await service.createOperator(account());
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await service
         .signIn({ email: 'traffic@archive.test', password: 'wrong-password-here' })
         .catch(() => {});
