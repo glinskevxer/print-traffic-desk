@@ -149,9 +149,7 @@ describe('royalty statement endpoints', () => {
       .send({ issuedOn: '2025-07-05' })
       .expect(200);
 
-    const res = await request(app)
-      .get('/royalty-statements?overdueAsOf=2025-09-01')
-      .expect(200);
+    const res = await request(app).get('/royalty-statements?overdueAsOf=2025-09-01').expect(200);
 
     expect(res.body.items).toHaveLength(1);
   });

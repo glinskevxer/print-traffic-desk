@@ -350,9 +350,9 @@ describe('moving a booking on', () => {
     const { booking } = await service.requestBooking(ask());
     await service.cancelBooking(booking.publicId, { reason: 'first' });
 
-    await expect(
-      service.cancelBooking(booking.publicId, { reason: 'second' }),
-    ).rejects.toThrow(/already closed/);
+    await expect(service.cancelBooking(booking.publicId, { reason: 'second' })).rejects.toThrow(
+      /already closed/,
+    );
   });
 
   it('records the cancellation fee when the desk charges one', async () => {
@@ -459,7 +459,10 @@ describe('settling a booking', () => {
   it('works the royalty out from the licence terms', async () => {
     const booking = await confirmed();
 
-    const { booking: updated, royalty } = await service.reportBoxOffice(booking.publicId, takings());
+    const { booking: updated, royalty } = await service.reportBoxOffice(
+      booking.publicId,
+      takings(),
+    );
 
     expect(royalty.amountMinor).toBe(64400);
     expect(updated.royaltyMinor).toBe(64400);
@@ -470,7 +473,16 @@ describe('settling a booking', () => {
     const { RightsWindow } = models();
     await RightsWindow.updateMany(
       {},
-      { $set: { terms: { kind: 'split-after-nut', currency: 'GBP', percentageBps: 5000, houseNutDeductible: true } } },
+      {
+        $set: {
+          terms: {
+            kind: 'split-after-nut',
+            currency: 'GBP',
+            percentageBps: 5000,
+            houseNutDeductible: true,
+          },
+        },
+      },
     );
     const booking = await confirmed();
 

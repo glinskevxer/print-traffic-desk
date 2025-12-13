@@ -39,7 +39,11 @@ function costOf({ model, promptTokens = 0, completionTokens = 0 }) {
   const rate = rateFor(model);
   const input = Math.round((promptTokens * rate.input * 100) / 1000000);
   const output = Math.round((completionTokens * rate.output * 100) / 1000000);
-  return { inputHundredthCents: input, outputHundredthCents: output, totalHundredthCents: input + output };
+  return {
+    inputHundredthCents: input,
+    outputHundredthCents: output,
+    totalHundredthCents: input + output,
+  };
 }
 
 function isKnownModel(model) {

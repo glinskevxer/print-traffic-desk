@@ -29,7 +29,10 @@ const readNoteBody = z.object({
 const listJobsQuery = listQuery.extend({
   kind: z.enum(EXTRACTION_KINDS).optional(),
   status: z.enum(JOB_STATUSES).optional(),
-  needsHumanReview: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  needsHumanReview: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
 });
 
 const jobParams = z.object({ jobId: publicId('exj') });

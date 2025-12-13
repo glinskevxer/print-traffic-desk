@@ -21,11 +21,9 @@ async function getWindow(publicId, session = null) {
 /** Every window on a title that is not itself, for clash checking. */
 async function siblingWindows(window, session = null) {
   const { RightsWindow } = models();
-  return RightsWindow.find(
-    { title: window.title, publicId: { $ne: window.publicId } },
-    null,
-    { session },
-  );
+  return RightsWindow.find({ title: window.title, publicId: { $ne: window.publicId } }, null, {
+    session,
+  });
 }
 
 async function createWindow(input) {
@@ -38,10 +36,13 @@ async function createWindow(input) {
   assertTermsComplete(input.terms);
 
   if (input.terms.currency !== holder.remittanceCurrency) {
-    throw new RuleRefusedError('a licence has to be written in the currency the holder is paid in', {
-      terms: input.terms.currency,
-      holder: holder.remittanceCurrency,
-    });
+    throw new RuleRefusedError(
+      'a licence has to be written in the currency the holder is paid in',
+      {
+        terms: input.terms.currency,
+        holder: holder.remittanceCurrency,
+      },
+    );
   }
 
   let heldBy = null;
@@ -174,8 +175,14 @@ async function listWindows(query = {}) {
  * needs, then runs the engine. Nothing is written: a booking calls this, and so
  * does the programmer who wants to know before they advertise.
  */
-async function clearScreeningRequest({ titleId, venue, localDate, exhibitionType, screenings = 1,
-  screeningsAtVenue = 0 }) {
+async function clearScreeningRequest({
+  titleId,
+  venue,
+  localDate,
+  exhibitionType,
+  screenings = 1,
+  screeningsAtVenue = 0,
+}) {
   const { RightsWindow, Title, Venue } = models();
 
   const title = await required(Title, titleId);

@@ -27,7 +27,10 @@ async function countRequest({ key, now, windowMs }) {
 
   const counter = await RateCounter.findOneAndUpdate(
     { key, windowStartedAt: startedAt },
-    { $inc: { count: 1 }, $setOnInsert: { expiresAt: new Date(startedAt.getTime() + windowMs * 2) } },
+    {
+      $inc: { count: 1 },
+      $setOnInsert: { expiresAt: new Date(startedAt.getTime() + windowMs * 2) },
+    },
     { upsert: true, new: true },
   );
 
@@ -38,7 +41,12 @@ async function countRequest({ key, now, windowMs }) {
  * Answers with the standard headers whether it refused or not, so a client can
  * slow down before it is told to.
  */
-function rateLimit({ windowMs = DEFAULTS.windowMs, max = DEFAULTS.max, keyOf = defaultKeyOf, scope = 'all' } = {}) {
+function rateLimit({
+  windowMs = DEFAULTS.windowMs,
+  max = DEFAULTS.max,
+  keyOf = defaultKeyOf,
+  scope = 'all',
+} = {}) {
   return async function limit(req, res, next) {
     try {
       const now = Date.now();

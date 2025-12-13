@@ -42,7 +42,10 @@ describe('auth endpoints', () => {
     await anOperator(overrides);
     const res = await request(app)
       .post('/auth/sign-in')
-      .send({ email: overrides.email || 'traffic@archive.test', password: 'a-long-enough-password' })
+      .send({
+        email: overrides.email || 'traffic@archive.test',
+        password: 'a-long-enough-password',
+      })
       .expect(200);
     return res.body.token;
   }

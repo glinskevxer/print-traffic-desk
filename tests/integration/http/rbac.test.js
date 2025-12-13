@@ -52,29 +52,25 @@ describe('what each role may do', () => {
   });
 
   it('will not let a programmer add a house', async () => {
-    await request(appAs('programmer'))
-      .post('/venues')
-      .send({ code: 'GB-LON-ICA' })
-      .expect(403);
+    await request(appAs('programmer')).post('/venues').send({ code: 'GB-LON-ICA' }).expect(403);
   });
 
   it('lets an archivist catalogue a print but not activate a licence', async () => {
     const archivist = appAs('archivist');
 
-    await request(archivist)
-      .post('/elements')
-      .send({ barcode: 'PE-000001' })
-      .expect(400);
+    await request(archivist).post('/elements').send({ barcode: 'PE-000001' }).expect(400);
 
-    await request(archivist)
-      .put('/rights-windows/rw_0000000000000000/activate')
-      .expect(403);
+    await request(archivist).put('/rights-windows/rw_0000000000000000/activate').expect(403);
   });
 
   it('lets traffic move a print', async () => {
     const res = await request(appAs('traffic'))
       .post('/shipments')
-      .send({ elementId: 'elem_0000000000000000', toVenueId: venue.publicId, screeningLocalDate: '2025-06-20' })
+      .send({
+        elementId: 'elem_0000000000000000',
+        toVenueId: venue.publicId,
+        screeningLocalDate: '2025-06-20',
+      })
       .expect(404);
 
     expect(res.body.error.code).toBe('not_found');

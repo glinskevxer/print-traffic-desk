@@ -64,7 +64,8 @@ const createBody = z
     path: ['endsOn'],
   })
   .refine(
-    (body) => !body.exclusivity || body.exclusivity.scope === 'none' || body.exclusivity.heldByVenueId,
+    (body) =>
+      !body.exclusivity || body.exclusivity.scope === 'none' || body.exclusivity.heldByVenueId,
     { message: 'an exclusive licence has to name the house holding it', path: ['exclusivity'] },
   );
 
@@ -74,7 +75,10 @@ const listWindowsQuery = listQuery.extend({
   status: z.enum(WINDOW_STATUSES).optional(),
   territory: licenceTerritory.optional(),
   onDate: isoDate.optional(),
-  exclusiveOnly: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  exclusiveOnly: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   sortBy: z.enum(['startsOn', 'endsOn', 'createdAt']).default('startsOn'),
 });
 
@@ -87,7 +91,10 @@ const clearanceQuery = z
     exhibitionType: z.enum(EXHIBITION_TYPES).default('repertory'),
     screenings: z.coerce.number().int().min(1).max(50).default(1),
   })
-  .refine((query) => query.localDate, { message: 'a screening date is needed', path: ['localDate'] });
+  .refine((query) => query.localDate, {
+    message: 'a screening date is needed',
+    path: ['localDate'],
+  });
 
 const windowParams = z.object({ windowId: publicId('rw') });
 

@@ -45,14 +45,18 @@ describe('rights window model', () => {
 
   it('refuses a holdback that outlasts the window', async () => {
     await expect(
-      makeRightsWindow({ startsOn: '2025-01-01', endsOn: '2025-06-01', holdbackUntil: '2025-07-01' }),
+      makeRightsWindow({
+        startsOn: '2025-01-01',
+        endsOn: '2025-06-01',
+        holdbackUntil: '2025-07-01',
+      }),
     ).rejects.toThrow(/licences nothing/);
   });
 
   it('refuses an exclusive window with nobody holding it', async () => {
-    await expect(
-      makeRightsWindow({ exclusivity: { scope: 'city' } }),
-    ).rejects.toThrow(/name the house holding it/);
+    await expect(makeRightsWindow({ exclusivity: { scope: 'city' } })).rejects.toThrow(
+      /name the house holding it/,
+    );
   });
 
   it('takes an exclusive window that names the house', async () => {

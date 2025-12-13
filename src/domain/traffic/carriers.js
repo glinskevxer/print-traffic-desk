@@ -108,7 +108,10 @@ function fastestPermitted({ fromTerritory, toTerritory, restrictions, baseStock 
 
   return allowed
     .map((service) => estimateTransit({ fromTerritory, toTerritory, service }))
-    .sort((a, b) => a.totalDays - b.totalDays || SERVICES.indexOf(a.service) - SERVICES.indexOf(b.service))
+    .sort(
+      (a, b) =>
+        a.totalDays - b.totalDays || SERVICES.indexOf(a.service) - SERVICES.indexOf(b.service),
+    )
     .at(0);
 }
 

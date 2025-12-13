@@ -101,7 +101,11 @@ describe('the openai client', () => {
   });
 
   it('refuses an answer that ran out of room', async () => {
-    const sdk = fakeSdk([answer('{"partial":', { choices: [{ message: { content: '{"a":' }, finish_reason: 'length' }] })]);
+    const sdk = fakeSdk([
+      answer('{"partial":', {
+        choices: [{ message: { content: '{"a":' }, finish_reason: 'length' }],
+      }),
+    ]);
     const client = createClient({ sdk, model: 'gpt-4o-mini' });
 
     await expect(client.completeJson({ system: 's', user: 'u' })).rejects.toThrow(/cut off/);

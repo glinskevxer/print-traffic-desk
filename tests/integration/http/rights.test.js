@@ -125,7 +125,9 @@ describe('rights window endpoints', () => {
   it('explains a refusal rule by rule', async () => {
     const created = await request(app)
       .post('/rights-windows')
-      .send(body({ blackouts: [{ startsOn: '2025-04-01', endsOn: '2025-04-30', reason: 'Cannes' }] }))
+      .send(
+        body({ blackouts: [{ startsOn: '2025-04-01', endsOn: '2025-04-30', reason: 'Cannes' }] }),
+      )
       .expect(201);
     await request(app).put(`/rights-windows/${created.body.id}/activate`).expect(200);
 

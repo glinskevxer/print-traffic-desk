@@ -73,9 +73,7 @@ describe('inspection endpoints', () => {
     expect(preview.body.verdict).toBe('projectable-with-restrictions');
     expect(preview.body.restrictions).toContain('reduced-speed');
 
-    const history = await request(app)
-      .get(`/elements/${element.publicId}/inspections`)
-      .expect(200);
+    const history = await request(app).get(`/elements/${element.publicId}/inspections`).expect(200);
     expect(history.body.items).toHaveLength(0);
   });
 

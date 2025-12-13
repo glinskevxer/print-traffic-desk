@@ -73,13 +73,19 @@ describe('clearance rules', () => {
     const festivalOnly = window({ exhibitionTypes: ['festival'] });
 
     expect(exhibitionTypeRule(festivalOnly, request({ exhibitionType: 'festival' })).ok).toBe(true);
-    expect(exhibitionTypeRule(festivalOnly, request()).detail).toMatch(/covers festival, not repertory/);
+    expect(exhibitionTypeRule(festivalOnly, request()).detail).toMatch(
+      /covers festival, not repertory/,
+    );
   });
 
   it('counts the whole licence allowance', () => {
     expect(screeningCapRule(window(), request()).detail).toMatch(/not capped/);
-    expect(screeningCapRule(window({ maxScreenings: 4, screeningsUsed: 3 }), request()).ok).toBe(true);
-    expect(screeningCapRule(window({ maxScreenings: 4, screeningsUsed: 4 }), request()).ok).toBe(false);
+    expect(screeningCapRule(window({ maxScreenings: 4, screeningsUsed: 3 }), request()).ok).toBe(
+      true,
+    );
+    expect(screeningCapRule(window({ maxScreenings: 4, screeningsUsed: 4 }), request()).ok).toBe(
+      false,
+    );
   });
 
   it('counts a run of screenings against the allowance in one go', () => {
@@ -102,7 +108,9 @@ describe('clearance rules', () => {
       blackouts: [{ startsOn: '2025-05-13', endsOn: '2025-05-24', reason: 'Cannes' }],
     });
 
-    expect(blackoutRule(blacked, request({ localDate: '2025-05-13' })).detail).toMatch(/for Cannes/);
+    expect(blackoutRule(blacked, request({ localDate: '2025-05-13' })).detail).toMatch(
+      /for Cannes/,
+    );
     expect(blackoutRule(blacked, request({ localDate: '2025-05-24' })).ok).toBe(false);
     expect(blackoutRule(blacked, request({ localDate: '2025-05-25' })).ok).toBe(true);
   });

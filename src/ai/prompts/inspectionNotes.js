@@ -18,7 +18,7 @@ function codeTable() {
 
 function systemPrompt() {
   return [
-    'You turn a film inspector\'s handwritten bench notes into structured findings',
+    "You turn a film inspector's handwritten bench notes into structured findings",
     'for an archive booking desk. You never invent a finding the note does not',
     'describe.',
     '',

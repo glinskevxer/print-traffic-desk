@@ -64,7 +64,8 @@ function roundQuotient(numerator, denominator, mode) {
   } else if (mode === ROUNDING.DOWN) {
     magnitude = whole;
   } else if (mode === ROUNDING.HALF_EVEN) {
-    if (twice > absDenominator || (twice === absDenominator && whole % 2 === 1)) magnitude = whole + 1;
+    if (twice > absDenominator || (twice === absDenominator && whole % 2 === 1))
+      magnitude = whole + 1;
   } else {
     if (twice >= absDenominator) magnitude = whole + 1;
   }

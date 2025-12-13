@@ -57,9 +57,7 @@ function rankCandidates(elements, { venue, territoryOf = () => null }) {
     }
   }
 
-  runnable.sort(
-    (a, b) => a.score - b.score || a.element.barcode.localeCompare(b.element.barcode),
-  );
+  runnable.sort((a, b) => a.score - b.score || a.element.barcode.localeCompare(b.element.barcode));
   return { runnable, rejected };
 }
 

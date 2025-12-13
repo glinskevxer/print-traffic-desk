@@ -20,9 +20,10 @@ async function createVenue(input) {
   try {
     return await Venue.create(input);
   } catch (err) {
-    if (err.code === 11000) throw new ConflictError(`venue ${input.code} is already on file`, {
-      code: input.code,
-    });
+    if (err.code === 11000)
+      throw new ConflictError(`venue ${input.code} is already on file`, {
+        code: input.code,
+      });
     throw err;
   }
 }
@@ -48,7 +49,8 @@ async function listVenues(query = {}) {
   if (query.city) filter.city = new RegExp(`^${query.city}$`, 'i');
   if (query.active !== undefined) filter.active = query.active;
   if (query.gauge) filter['booth.gauges'] = query.gauge;
-  if (query.nitrateCertified !== undefined) filter['booth.nitrateCertified'] = query.nitrateCertified;
+  if (query.nitrateCertified !== undefined)
+    filter['booth.nitrateCertified'] = query.nitrateCertified;
 
   return paginate(Venue, {
     filter,
@@ -59,8 +61,16 @@ async function listVenues(query = {}) {
   });
 }
 
-const EDITABLE = ['name', 'address', 'seats', 'houseNutMinor', 'inboundLeadDays',
-  'outboundLeadDays', 'carrierAccount', 'timezone'];
+const EDITABLE = [
+  'name',
+  'address',
+  'seats',
+  'houseNutMinor',
+  'inboundLeadDays',
+  'outboundLeadDays',
+  'carrierAccount',
+  'timezone',
+];
 
 async function updateVenue(publicId, patch) {
   const venue = await getVenue(publicId);

@@ -70,10 +70,7 @@ async function recordChange(
 ) {
   const changes = diffFields(before, document.toObject(), fields);
   if (changes.length === 0 && !metadata) return null;
-  return record(
-    { action, subjectType, subjectId: document.publicId, changes, metadata },
-    options,
-  );
+  return record({ action, subjectType, subjectId: document.publicId, changes, metadata }, options);
 }
 
 async function trailFor(subjectType, subjectId, { limit = 50 } = {}) {

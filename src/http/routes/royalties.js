@@ -112,10 +112,7 @@ function royaltyRoutes() {
       body: z.object({ paidOn: isoDate, paymentReference: z.string().min(2).max(80).optional() }),
     }),
     asyncHandler(async (req, res) => {
-      const statement = await service.recordPayment(
-        req.valid.params.statementId,
-        req.valid.body,
-      );
+      const statement = await service.recordPayment(req.valid.params.statementId, req.valid.body);
       res.json(statement.toJSON());
     }),
   );

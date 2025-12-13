@@ -44,8 +44,13 @@ const listShipmentsQuery = listQuery.extend({
   venueId: publicId('ven').optional(),
   status: z.enum(SHIPMENT_STATUSES).optional(),
   leg: z.enum(['outbound', 'return', 'transfer']).optional(),
-  openOnly: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
-  sortBy: z.enum(['plannedDispatchOn', 'plannedArrivalOn', 'createdAt']).default('plannedDispatchOn'),
+  openOnly: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  sortBy: z
+    .enum(['plannedDispatchOn', 'plannedArrivalOn', 'createdAt'])
+    .default('plannedDispatchOn'),
 });
 
 const shipmentParams = z.object({ shipmentId: publicId('shp') });
@@ -126,7 +131,11 @@ function shipmentRoutes() {
       );
       res.json({
         ...shipment.toJSON(),
-        element: { id: element.publicId, status: element.status, location: element.currentLocation },
+        element: {
+          id: element.publicId,
+          status: element.status,
+          location: element.currentLocation,
+        },
       });
     }),
   );

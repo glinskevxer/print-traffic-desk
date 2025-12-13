@@ -47,13 +47,17 @@ describe('inspection damage codes', () => {
   });
 
   it('refuses to score anything outside the vocabulary', () => {
-    expect(() => scoreFinding({ code: 'INVENTED', severity: 'minor' })).toThrow(/not an inspection code/);
+    expect(() => scoreFinding({ code: 'INVENTED', severity: 'minor' })).toThrow(
+      /not an inspection code/,
+    );
     expect(() => scoreFinding({ code: 'PERF-TEAR', severity: 'awful' })).toThrow(/not a severity/);
   });
 
   it('only a severe finding puts a restriction on the print', () => {
     expect(restrictionsForFinding({ code: 'PERF-TEAR', severity: 'moderate' })).toEqual([]);
-    expect(restrictionsForFinding({ code: 'PERF-TEAR', severity: 'severe' })).toContain('no-platter');
+    expect(restrictionsForFinding({ code: 'PERF-TEAR', severity: 'severe' })).toContain(
+      'no-platter',
+    );
   });
 
   it('has nothing to add for codes that only look bad', () => {

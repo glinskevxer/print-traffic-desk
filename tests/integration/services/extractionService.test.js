@@ -87,9 +87,15 @@ describe('extraction as the desk runs it', () => {
 
   it('reuses an identical letter rather than paying twice', async () => {
     client.answerWith(LICENCE_ANSWER);
-    const first = await service.readLicenceLetter({ titleId: title.publicId, contractText: LETTER });
+    const first = await service.readLicenceLetter({
+      titleId: title.publicId,
+      contractText: LETTER,
+    });
 
-    const second = await service.readLicenceLetter({ titleId: title.publicId, contractText: LETTER });
+    const second = await service.readLicenceLetter({
+      titleId: title.publicId,
+      contractText: LETTER,
+    });
 
     expect(second.reused).toBe(true);
     expect(second.job.publicId).toBe(first.job.publicId);
@@ -99,7 +105,10 @@ describe('extraction as the desk runs it', () => {
   it('flags a reading the model was not sure about', async () => {
     client.answerWith({ ...LICENCE_ANSWER, confidence: 0.4 });
 
-    const { job } = await service.readLicenceLetter({ titleId: title.publicId, contractText: LETTER });
+    const { job } = await service.readLicenceLetter({
+      titleId: title.publicId,
+      contractText: LETTER,
+    });
 
     expect(job.needsHumanReview).toBe(true);
   });
@@ -111,7 +120,10 @@ describe('extraction as the desk runs it', () => {
       unclear: [{ field: 'maxScreenings', why: 'the letter says a reasonable number' }],
     });
 
-    const { job } = await service.readLicenceLetter({ titleId: title.publicId, contractText: LETTER });
+    const { job } = await service.readLicenceLetter({
+      titleId: title.publicId,
+      contractText: LETTER,
+    });
 
     expect(job.needsHumanReview).toBe(true);
   });
@@ -156,7 +168,10 @@ describe('extraction as the desk runs it', () => {
 
   it('turns an applied reading into a draft licence, never a live one', async () => {
     client.answerWith(LICENCE_ANSWER);
-    const { job } = await service.readLicenceLetter({ titleId: title.publicId, contractText: LETTER });
+    const { job } = await service.readLicenceLetter({
+      titleId: title.publicId,
+      contractText: LETTER,
+    });
 
     const { window } = await service.applyLicenceExtraction(job.publicId, {
       reviewedBy: 'rights@archive.test',
@@ -170,7 +185,10 @@ describe('extraction as the desk runs it', () => {
 
   it('will not apply the same reading twice', async () => {
     client.answerWith(LICENCE_ANSWER);
-    const { job } = await service.readLicenceLetter({ titleId: title.publicId, contractText: LETTER });
+    const { job } = await service.readLicenceLetter({
+      titleId: title.publicId,
+      contractText: LETTER,
+    });
     await service.applyLicenceExtraction(job.publicId, { reviewedBy: 'a@b.test' });
 
     await expect(
@@ -180,7 +198,10 @@ describe('extraction as the desk runs it', () => {
 
   it('rejects a reading with a reason and will not apply it after', async () => {
     client.answerWith(LICENCE_ANSWER);
-    const { job } = await service.readLicenceLetter({ titleId: title.publicId, contractText: LETTER });
+    const { job } = await service.readLicenceLetter({
+      titleId: title.publicId,
+      contractText: LETTER,
+    });
 
     const rejected = await service.rejectExtraction(job.publicId, {
       reviewedBy: 'rights@archive.test',

@@ -52,7 +52,11 @@ describe('request validation', () => {
       params: z.object({ id: z.string().uuid() }),
     });
 
-    const err = await run(middleware, { body: { year: 'x' }, query: { limit: 'y' }, params: { id: 'z' } });
+    const err = await run(middleware, {
+      body: { year: 'x' },
+      query: { limit: 'y' },
+      params: { id: 'z' },
+    });
 
     expect(err.details.issues.map((i) => i.source).sort()).toEqual(['body', 'path', 'query']);
     expect(err.message).toMatch(/body and query and path/);
@@ -81,7 +85,9 @@ describe('request validation', () => {
     expect(caught.details.issues).toEqual([
       { source: 'body', key: 'endsOn', problem: 'the window ends before it starts' },
     ]);
-    expect(parseOrThrow(dateRange, { startsOn: '2025-04-01', endsOn: '2025-04-01' }, 'body')).toEqual({
+    expect(
+      parseOrThrow(dateRange, { startsOn: '2025-04-01', endsOn: '2025-04-01' }, 'body'),
+    ).toEqual({
       startsOn: '2025-04-01',
       endsOn: '2025-04-01',
     });

@@ -56,10 +56,12 @@ function assertTransition(from, to, context = {}) {
   if (canTransition(from, to)) return;
 
   const note = TRANSITION_NOTES[`${from}->${to}`] || TRANSITION_NOTES[`${from}->`];
-  throw new RuleRefusedError(
-    note || `a print cannot go from ${from} to ${to}`,
-    { ...context, from, to, allowed: transitionsFrom(from) },
-  );
+  throw new RuleRefusedError(note || `a print cannot go from ${from} to ${to}`, {
+    ...context,
+    from,
+    to,
+    allowed: transitionsFrom(from),
+  });
 }
 
 /** What an inspection verdict does to the element it was written against. */

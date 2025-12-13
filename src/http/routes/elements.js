@@ -32,7 +32,10 @@ const createBody = z.object({
   projectionSpeed: z.union(PROJECTION_SPEEDS.map((s) => z.literal(s))).default(24),
   footage: z.number().int().min(1).max(60000),
   reelCount: z.number().int().min(1).max(30),
-  printLanguage: z.string().regex(/^[a-z]{2,3}$/).optional(),
+  printLanguage: z
+    .string()
+    .regex(/^[a-z]{2,3}$/)
+    .optional(),
   subtitles: z
     .array(
       z.object({
@@ -57,7 +60,10 @@ const listElementsQuery = listQuery.extend({
   gauge: z.enum(GAUGES).optional(),
   baseStock: z.enum(BASE_STOCKS).optional(),
   grade: z.enum(['A', 'B', 'C', 'D']).optional(),
-  needsInspection: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  needsInspection: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   sortBy: z.enum(['barcode', 'conditionGrade', 'createdAt']).default('barcode'),
 });
 

@@ -116,4 +116,10 @@ function toWindowInput(extracted, { titleId, rightsHolderId }) {
   return input;
 }
 
-module.exports = { extractLicenceTerms, toWindowInput, fingerprint, assertReadable, PROMPT_VERSION };
+module.exports = {
+  extractLicenceTerms,
+  toWindowInput,
+  fingerprint,
+  assertReadable,
+  PROMPT_VERSION,
+};

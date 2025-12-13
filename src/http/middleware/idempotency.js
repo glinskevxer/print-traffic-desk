@@ -59,9 +59,7 @@ function idempotency({ required = false } = {}) {
 
     if (record.state === 'completed') {
       if (record.requestHash !== requestHash) {
-        return next(
-          new ConflictError('that key was used for a different request', { key, route }),
-        );
+        return next(new ConflictError('that key was used for a different request', { key, route }));
       }
       res.set('idempotent-replay', 'true');
       return res.status(record.status).json(record.body);

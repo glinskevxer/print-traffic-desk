@@ -33,7 +33,9 @@ describe('cursor paging', () => {
 
   it('refuses a cursor it did not issue', () => {
     expect(() => decodeCursor('not-a-cursor')).toThrow(ValidationError);
-    expect(() => decodeCursor(Buffer.from('{}').toString('base64url'))).toThrow(/missing its position/);
+    expect(() => decodeCursor(Buffer.from('{}').toString('base64url'))).toThrow(
+      /missing its position/,
+    );
   });
 
   it('builds a filter that walks forward past ties', () => {

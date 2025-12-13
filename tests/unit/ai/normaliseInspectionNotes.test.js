@@ -80,9 +80,9 @@ describe('reading a bench note', () => {
       findings: [{ reel: 1, code: 'LOOKS-ROUGH', severity: 'minor' }],
     });
 
-    await expect(
-      normaliseInspectionNotes({ client, noteText: NOTE, element }),
-    ).rejects.toThrow(/findings this desk cannot use/);
+    await expect(normaliseInspectionNotes({ client, noteText: NOTE, element })).rejects.toThrow(
+      /findings this desk cannot use/,
+    );
   });
 
   it('drops a finding on a reel the print does not have', async () => {
@@ -114,9 +114,9 @@ describe('reading a bench note', () => {
   it('will not send a scribble', async () => {
     const client = clientAnswering(good);
 
-    await expect(
-      normaliseInspectionNotes({ client, noteText: 'ok', element }),
-    ).rejects.toThrow(/not enough of a note/);
+    await expect(normaliseInspectionNotes({ client, noteText: 'ok', element })).rejects.toThrow(
+      /not enough of a note/,
+    );
     expect(client.calls).toHaveLength(0);
   });
 
@@ -125,10 +125,7 @@ describe('reading a bench note', () => {
   });
 
   it('splits findings by whether the reel exists', () => {
-    const { kept, dropped } = dropImpossibleReels(
-      [{ reel: 1 }, { reel: 6 }, { reel: 7 }],
-      6,
-    );
+    const { kept, dropped } = dropImpossibleReels([{ reel: 1 }, { reel: 6 }, { reel: 7 }], 6);
 
     expect(kept).toHaveLength(2);
     expect(dropped).toHaveLength(1);
@@ -162,7 +159,12 @@ describe('reading a bench note', () => {
 
   it('files as a routine inspection unless told otherwise', () => {
     const input = toInspectionInput(
-      { findings: [], measurements: { shrinkagePercent: null, adStripLevel: null, warpMillimetres: null }, confidence: 1, unclear: [] },
+      {
+        findings: [],
+        measurements: { shrinkagePercent: null, adStripLevel: null, warpMillimetres: null },
+        confidence: 1,
+        unclear: [],
+      },
       { inspector: 'A. Novak' },
     );
 

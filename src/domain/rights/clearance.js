@@ -104,4 +104,10 @@ function refusalDetails(evaluations) {
   return details;
 }
 
-module.exports = { clearScreening, evaluateWindow, preferenceOrder, summariseRefusal, refusalDetails };
+module.exports = {
+  clearScreening,
+  evaluateWindow,
+  preferenceOrder,
+  summariseRefusal,
+  refusalDetails,
+};

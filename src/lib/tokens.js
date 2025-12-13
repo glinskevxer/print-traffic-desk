@@ -38,7 +38,10 @@ function signToken({ operator, secret, ttlMinutes = 480, now = Date.now() }) {
     aud: AUDIENCE,
   };
 
-  return { token: jwt.sign(claims, secret, { algorithm: 'HS256' }), expiresAt: new Date(claims.exp * 1000) };
+  return {
+    token: jwt.sign(claims, secret, { algorithm: 'HS256' }),
+    expiresAt: new Date(claims.exp * 1000),
+  };
 }
 
 /**
@@ -68,4 +71,12 @@ function bearerFrom(headerValue) {
   return match ? match[1] : null;
 }
 
-module.exports = { ISSUER, AUDIENCE, MIN_SECRET_LENGTH, signToken, verifyToken, bearerFrom, assertSecret };
+module.exports = {
+  ISSUER,
+  AUDIENCE,
+  MIN_SECRET_LENGTH,
+  signToken,
+  verifyToken,
+  bearerFrom,
+  assertSecret,
+};

@@ -96,7 +96,12 @@ describe('shipment model', () => {
   it('records what actually turned up', async () => {
     const shipment = await leg({
       status: 'delivered',
-      arrivalCheck: { checkedBy: 'A. Novak', cansReceived: 5, sealsIntact: false, notes: 'one can missing' },
+      arrivalCheck: {
+        checkedBy: 'A. Novak',
+        cansReceived: 5,
+        sealsIntact: false,
+        notes: 'one can missing',
+      },
     });
 
     expect(shipment.arrivalCheck.cansReceived).toBe(5);

@@ -47,7 +47,9 @@ describe('exclusivity', () => {
   });
 
   it('reaches every city under a territory exclusive', () => {
-    const territoryWide = exclusive({ exclusivity: { scope: 'territory', heldBy: 'venue-prince' } });
+    const territoryWide = exclusive({
+      exclusivity: { scope: 'territory', heldBy: 'venue-prince' },
+    });
 
     expect(blocks(territoryWide, request({ city: 'Glasgow' }))).toBe(true);
     expect(blocks(territoryWide, request({ country: 'FR' }))).toBe(false);
@@ -67,7 +69,9 @@ describe('exclusivity', () => {
   });
 
   it('a window with no exclusivity blocks nobody', () => {
-    expect(blocks(exclusive({ exclusivity: { scope: 'none', heldBy: null } }), request())).toBe(false);
+    expect(blocks(exclusive({ exclusivity: { scope: 'none', heldBy: null } }), request())).toBe(
+      false,
+    );
   });
 
   it('names every house doing the blocking', () => {
@@ -109,7 +113,11 @@ describe('exclusivity', () => {
   });
 
   it('is not a clash when the dates never meet', () => {
-    const candidate = exclusive({ publicId: 'rw_NEW', startsOn: '2026-01-01', endsOn: '2026-06-01' });
+    const candidate = exclusive({
+      publicId: 'rw_NEW',
+      startsOn: '2026-01-01',
+      endsOn: '2026-06-01',
+    });
 
     expect(findExclusivityClashes(candidate, [exclusive({ publicId: 'rw_OLD' })])).toEqual([]);
   });
@@ -121,7 +129,10 @@ describe('exclusivity', () => {
   });
 
   it('a non exclusive candidate clashes with nothing', () => {
-    const candidate = exclusive({ publicId: 'rw_NEW', exclusivity: { scope: 'none', heldBy: null } });
+    const candidate = exclusive({
+      publicId: 'rw_NEW',
+      exclusivity: { scope: 'none', heldBy: null },
+    });
 
     expect(findExclusivityClashes(candidate, [exclusive()])).toEqual([]);
   });
@@ -136,8 +147,8 @@ describe('exclusivity', () => {
     const candidate = exclusive({ exclusivity: { scope: 'territory', heldBy: 'venue-prince' } });
 
     expect(clashIsResolvable(candidate, exclusive())).toBe(true);
-    expect(clashIsResolvable(candidate, exclusive({ exclusivity: { scope: 'city', heldBy: 'x' } }))).toBe(
-      false,
-    );
+    expect(
+      clashIsResolvable(candidate, exclusive({ exclusivity: { scope: 'city', heldBy: 'x' } })),
+    ).toBe(false);
   });
 });

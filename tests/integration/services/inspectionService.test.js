@@ -166,7 +166,10 @@ describe('recording an inspection', () => {
   it('filters the history by verdict', async () => {
     const element = await makePrintElement();
     await service.recordInspection(element.publicId, routine());
-    await service.recordInspection(element.publicId, routine({ measurements: { adStripLevel: 2 } }));
+    await service.recordInspection(
+      element.publicId,
+      routine({ measurements: { adStripLevel: 2 } }),
+    );
 
     const page = await service.listInspections({ verdict: 'quarantine' });
 

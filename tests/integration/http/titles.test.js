@@ -122,7 +122,6 @@ describe('title endpoints', () => {
 
   it('pages the catalogue with a cursor', async () => {
     for (const slug of ['a-one', 'b-two', 'c-three']) {
-       
       await makeTitle({ slug, rightsHolder: holder._id });
     }
 

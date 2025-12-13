@@ -48,9 +48,9 @@ describe('licence terms', () => {
   });
 
   it('will not split after a nut it does not deduct', () => {
-    expect(
-      problemsWith({ kind: 'split-after-nut', currency: 'GBP', percentageBps: 5000 }),
-    ).toEqual(['a split after the nut has to deduct the nut']);
+    expect(problemsWith({ kind: 'split-after-nut', currency: 'GBP', percentageBps: 5000 })).toEqual(
+      ['a split after the nut has to deduct the nut'],
+    );
   });
 
   it('will not let a flat deal carry a rate as well', () => {
@@ -66,9 +66,9 @@ describe('licence terms', () => {
   });
 
   it('spots a guarantee above the cap', () => {
-    expect(
-      problemsWith({ ...percentage, minimumGuaranteeMinor: 50000, capMinor: 20000 }),
-    ).toEqual(['the minimum guarantee is above the cap']);
+    expect(problemsWith({ ...percentage, minimumGuaranteeMinor: 50000, capMinor: 20000 })).toEqual([
+      'the minimum guarantee is above the cap',
+    ]);
   });
 
   it('takes a zero fee as a real fee', () => {
@@ -96,9 +96,14 @@ describe('licence terms', () => {
   });
 
   it('says a greater of deal in one line', () => {
-    expect(describeTerms({ kind: 'greater-of', currency: 'GBP', flatFeeMinor: 25000, percentageBps: 3500 })).toBe(
-      'the greater of 25000 GBP and 35%',
-    );
+    expect(
+      describeTerms({
+        kind: 'greater-of',
+        currency: 'GBP',
+        flatFeeMinor: 25000,
+        percentageBps: 3500,
+      }),
+    ).toBe('the greater of 25000 GBP and 35%');
   });
 
   it('mentions the nut, the guarantee and the cap', () => {
@@ -109,7 +114,9 @@ describe('licence terms', () => {
       capMinor: 90000,
     });
 
-    expect(described).toBe('35% of the gross, after the nut, minimum 15000 GBP, capped at 90000 GBP');
+    expect(described).toBe(
+      '35% of the gross, after the nut, minimum 15000 GBP, capped at 90000 GBP',
+    );
   });
 
   it('does not say after the nut twice for a split deal', () => {

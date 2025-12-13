@@ -1,6 +1,10 @@
 'use strict';
 
-const { scoreCandidate, rankCandidates, bestCandidate } = require('../../../../src/domain/elements/selection');
+const {
+  scoreCandidate,
+  rankCandidates,
+  bestCandidate,
+} = require('../../../../src/domain/elements/selection');
 
 const venue = {
   code: 'GB-LON-PRINCE',

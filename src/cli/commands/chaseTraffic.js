@@ -21,7 +21,9 @@ module.exports = {
     const late = await shipments.overdueArrivals(today);
     out(`legs that should have landed by ${today}: ${late.length}`);
     for (const leg of late) {
-      out(`  ${leg.publicId}  due ${leg.plannedArrivalOn}  ${leg.trackingReference || 'no tracking'}`);
+      out(
+        `  ${leg.publicId}  due ${leg.plannedArrivalOn}  ${leg.trackingReference || 'no tracking'}`,
+      );
     }
 
     const due = await inspections.dueForInspection({ limit: options.limit });

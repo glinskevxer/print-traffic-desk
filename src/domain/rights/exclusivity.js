@@ -39,7 +39,9 @@ function blocks(exclusiveWindow, request) {
 }
 
 function normaliseCity(city) {
-  return String(city || '').trim().toLowerCase();
+  return String(city || '')
+    .trim()
+    .toLowerCase();
 }
 
 /**

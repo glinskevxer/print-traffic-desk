@@ -39,7 +39,10 @@ describe('rights holder endpoints', () => {
   });
 
   it('will not take a licensor with nobody to ring', async () => {
-    await request(app).post('/rights-holders').send(body({ contacts: [] })).expect(400);
+    await request(app)
+      .post('/rights-holders')
+      .send(body({ contacts: [] }))
+      .expect(400);
   });
 
   it('refuses a currency the desk cannot settle', async () => {
@@ -79,7 +82,9 @@ describe('rights holder endpoints', () => {
 
     const res = await request(app)
       .patch(`/rights-holders/${created.body.id}`)
-      .send({ contacts: [{ name: 'Accounts', email: 'accounts@parkcircus.test', role: 'accounts' }] })
+      .send({
+        contacts: [{ name: 'Accounts', email: 'accounts@parkcircus.test', role: 'accounts' }],
+      })
       .expect(200);
     expect(res.body.contacts).toHaveLength(1);
 

@@ -73,13 +73,7 @@ function createClient({
    * One structured call. The model is told to answer as json and the answer is
    * parsed here, so callers only ever see an object or a desk error.
    */
-  async function completeJson({
-    system,
-    user,
-    temperature = 0,
-    maxTokens = 1500,
-    onRetry = null,
-  }) {
+  async function completeJson({ system, user, temperature = 0, maxTokens = 1500, onRetry = null }) {
     const started = Date.now();
 
     const response = await withRetry(

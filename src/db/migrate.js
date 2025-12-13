@@ -22,10 +22,12 @@ function loadMigrations(directory = MIGRATIONS_DIR) {
     .sort();
 
   const loaded = files.map((file) => {
-     
     const migration = require(path.join(directory, file));
     if (!migration.id || typeof migration.up !== 'function') {
-      throw new DeskError(`${file} is not a migration`, { code: CODES.CONFIG_INVALID, status: 500 });
+      throw new DeskError(`${file} is not a migration`, {
+        code: CODES.CONFIG_INVALID,
+        status: 500,
+      });
     }
     if (migration.id !== path.basename(file, '.js')) {
       throw new DeskError(`${file} declares the id ${migration.id}`, {
@@ -92,7 +94,13 @@ async function migrate({ directory, dryRun = false, onProgress = () => {} } = {}
     });
 
     onProgress({ id: migration.id, state: 'done', elapsedMs, outcome });
-    results.push({ id: migration.id, describe: migration.describe, applied: true, elapsedMs, outcome });
+    results.push({
+      id: migration.id,
+      describe: migration.describe,
+      applied: true,
+      elapsedMs,
+      outcome,
+    });
   }
 
   return results;

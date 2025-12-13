@@ -48,9 +48,9 @@ describe('desk errors', () => {
   it('marks only the failures worth retrying', () => {
     expect(isRetryable(new RateLimitedError(5))).toBe(true);
     expect(isRetryable(new UpstreamError('down', { service: 'openai' }))).toBe(true);
-    expect(isRetryable(new UpstreamError('bad request', { service: 'openai', retryable: false }))).toBe(
-      false,
-    );
+    expect(
+      isRetryable(new UpstreamError('bad request', { service: 'openai', retryable: false })),
+    ).toBe(false);
     expect(isRetryable(new ValidationError('bad', []))).toBe(false);
     expect(isRetryable(new Error('boom'))).toBe(false);
   });

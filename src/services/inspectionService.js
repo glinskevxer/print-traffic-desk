@@ -24,7 +24,10 @@ async function loadElement(publicId, session = null) {
  */
 async function previewInspection(elementPublicId, input) {
   const element = await loadElement(elementPublicId);
-  const carried = withoutRestrictions(element.handlingRestrictions, input.restrictionsCleared || []);
+  const carried = withoutRestrictions(
+    element.handlingRestrictions,
+    input.restrictionsCleared || [],
+  );
 
   return assessCondition({
     findings: input.findings || [],
@@ -58,7 +61,10 @@ async function recordInspection(elementPublicId, input) {
       : await Venue.findById(element.currentLocation, null, { session });
     if (!venue) throw new NotFoundError('venue', input.atVenueId);
 
-    const carried = withoutRestrictions(element.handlingRestrictions, input.restrictionsCleared || []);
+    const carried = withoutRestrictions(
+      element.handlingRestrictions,
+      input.restrictionsCleared || [],
+    );
     const footage = input.footageInspected || element.footage;
     const assessment = assessCondition({
       findings: input.findings || [],

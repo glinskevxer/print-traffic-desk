@@ -41,7 +41,10 @@ const updateBody = z
 const listHoldersQuery = listQuery.extend({
   kind: z.enum(['distributor', 'archive', 'estate', 'filmmaker', 'sales-agent']).optional(),
   territory: territory.optional(),
-  active: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  active: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   sortBy: z.enum(['name', 'kind', 'createdAt']).default('name'),
 });
 

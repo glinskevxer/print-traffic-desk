@@ -3,11 +3,7 @@
 const express = require('express');
 const { requestContext, requestLogging } = require('./middleware/requestContext');
 const { authenticate, requireOperator } = require('./middleware/auth');
-const {
-  securityHeaders,
-  crossOrigin,
-  rejectMongoOperators,
-} = require('./middleware/security');
+const { securityHeaders, crossOrigin, rejectMongoOperators } = require('./middleware/security');
 const { rateLimit } = require('./middleware/rateLimit');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');

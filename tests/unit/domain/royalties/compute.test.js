@@ -34,7 +34,12 @@ describe('working out a royalty', () => {
 
   it('takes a percentage after the nut when the deal says so', () => {
     const result = computeRoyalty({
-      terms: { kind: 'split-after-nut', currency: 'GBP', percentageBps: 5000, houseNutDeductible: true },
+      terms: {
+        kind: 'split-after-nut',
+        currency: 'GBP',
+        percentageBps: 5000,
+        houseNutDeductible: true,
+      },
       boxOffice: takings(),
     });
 
@@ -43,7 +48,12 @@ describe('working out a royalty', () => {
 
   it('never pays a share of a negative base', () => {
     const result = computeRoyalty({
-      terms: { kind: 'split-after-nut', currency: 'GBP', percentageBps: 5000, houseNutDeductible: true },
+      terms: {
+        kind: 'split-after-nut',
+        currency: 'GBP',
+        percentageBps: 5000,
+        houseNutDeductible: true,
+      },
       boxOffice: takings({ grossMinor: 10000 }),
     });
 
@@ -54,12 +64,19 @@ describe('working out a royalty', () => {
     const terms = { kind: 'greater-of', currency: 'GBP', flatFeeMinor: 25000, percentageBps: 3500 };
 
     expect(computeRoyalty({ terms, boxOffice: takings() }).amountMinor).toBe(64400);
-    expect(computeRoyalty({ terms, boxOffice: takings({ grossMinor: 20000 }) }).amountMinor).toBe(25000);
+    expect(computeRoyalty({ terms, boxOffice: takings({ grossMinor: 20000 }) }).amountMinor).toBe(
+      25000,
+    );
   });
 
   it('lifts a thin night up to the guarantee', () => {
     const result = computeRoyalty({
-      terms: { kind: 'percentage', currency: 'GBP', percentageBps: 3500, minimumGuaranteeMinor: 30000 },
+      terms: {
+        kind: 'percentage',
+        currency: 'GBP',
+        percentageBps: 3500,
+        minimumGuaranteeMinor: 30000,
+      },
       boxOffice: takings({ grossMinor: 40000 }),
     });
 
@@ -118,7 +135,12 @@ describe('working out a royalty', () => {
 
   it('shows its working', () => {
     const result = computeRoyalty({
-      terms: { kind: 'split-after-nut', currency: 'GBP', percentageBps: 5000, houseNutDeductible: true },
+      terms: {
+        kind: 'split-after-nut',
+        currency: 'GBP',
+        percentageBps: 5000,
+        houseNutDeductible: true,
+      },
       boxOffice: takings(),
     });
 
@@ -168,7 +190,13 @@ describe('working out a royalty', () => {
 
   it('will not total a statement that mixes currencies', () => {
     expect(() =>
-      totalFor([{ amountMinor: 1, currency: 'GBP' }, { amountMinor: 1, currency: 'EUR' }], 'GBP'),
+      totalFor(
+        [
+          { amountMinor: 1, currency: 'GBP' },
+          { amountMinor: 1, currency: 'EUR' },
+        ],
+        'GBP',
+      ),
     ).toThrow(/cannot mix currencies/);
   });
 });

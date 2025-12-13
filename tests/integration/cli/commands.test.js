@@ -13,7 +13,11 @@ const { makeTitle, makeRightsHolder, makeRightsWindow } = require('../../helpers
 
 function collector() {
   const lines = [];
-  return { lines, out: (line) => lines.push(String(line)), err: (line) => lines.push(String(line)) };
+  return {
+    lines,
+    out: (line) => lines.push(String(line)),
+    err: (line) => lines.push(String(line)),
+  };
 }
 
 describe('the command line', () => {

@@ -53,7 +53,9 @@ describe('logger', () => {
 
   it('flattens a cause down to its type and message', () => {
     const cause = new Error('ETIMEDOUT');
-    const serialised = serialiseError(new UpstreamError('extract failed', { service: 'openai', cause }));
+    const serialised = serialiseError(
+      new UpstreamError('extract failed', { service: 'openai', cause }),
+    );
 
     expect(serialised.cause).toEqual({ type: 'Error', message: 'ETIMEDOUT' });
     expect(serialised.retryable).toBe(true);

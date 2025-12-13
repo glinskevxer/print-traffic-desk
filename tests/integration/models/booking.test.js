@@ -104,7 +104,11 @@ describe('booking model', () => {
     const element = await makePrintElement();
     const booking = await makeBooking({
       element: element._id,
-      traffic: { committedFrom: '2025-06-16', committedUntil: '2025-06-26', service: 'road-freight' },
+      traffic: {
+        committedFrom: '2025-06-16',
+        committedUntil: '2025-06-26',
+        service: 'road-freight',
+      },
     });
 
     expect(booking.traffic.committedFrom).toBe('2025-06-16');

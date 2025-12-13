@@ -38,16 +38,12 @@ async function settledLinesFor({ holder, periodStartsOn, periodEndsOn, session }
 
   if (bookings.length === 0) return [];
 
-  const titles = await Title.find(
-    { _id: { $in: bookings.map((each) => each.title) } },
-    'slug',
-    { session },
-  );
-  const venues = await Venue.find(
-    { _id: { $in: bookings.map((each) => each.venue) } },
-    'code',
-    { session },
-  );
+  const titles = await Title.find({ _id: { $in: bookings.map((each) => each.title) } }, 'slug', {
+    session,
+  });
+  const venues = await Venue.find({ _id: { $in: bookings.map((each) => each.venue) } }, 'code', {
+    session,
+  });
   const titleById = new Map(titles.map((each) => [String(each._id), each.slug]));
   const venueById = new Map(venues.map((each) => [String(each._id), each.code]));
 

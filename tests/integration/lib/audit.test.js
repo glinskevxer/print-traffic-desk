@@ -37,7 +37,11 @@ describe('the audit trail', () => {
     expect(event.source).toBe('http');
     expect(event.action).toBe('element.status-changed');
     expect(event.changes).toHaveLength(1);
-    expect(event.changes[0]).toMatchObject({ field: 'status', before: 'available', after: 'quarantined' });
+    expect(event.changes[0]).toMatchObject({
+      field: 'status',
+      before: 'available',
+      after: 'quarantined',
+    });
   });
 
   it('writes nothing when a status is set to what it already was', async () => {

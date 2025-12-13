@@ -39,14 +39,22 @@ describe('carrier lanes', () => {
   });
 
   it('a courier beats road freight on the same lane', () => {
-    const road = estimateTransit({ fromTerritory: 'GB', toTerritory: 'GB', service: 'road-freight' });
+    const road = estimateTransit({
+      fromTerritory: 'GB',
+      toTerritory: 'GB',
+      service: 'road-freight',
+    });
     const courier = estimateTransit({ fromTerritory: 'GB', toTerritory: 'GB', service: 'courier' });
 
     expect(courier.totalDays).toBeLessThan(road.totalDays);
   });
 
   it('a hand carry skips the customs hold because somebody is carrying it', () => {
-    const quote = estimateTransit({ fromTerritory: 'GB', toTerritory: 'US', service: 'hand-carry' });
+    const quote = estimateTransit({
+      fromTerritory: 'GB',
+      toTerritory: 'US',
+      service: 'hand-carry',
+    });
 
     expect(quote.customsDays).toBe(0);
     expect(quote.totalDays).toBe(1);

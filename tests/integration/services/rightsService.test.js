@@ -1,7 +1,12 @@
 'use strict';
 
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { makeTitle, makeRightsHolder, makeVenue, makeRightsWindow } = require('../../helpers/factories');
+const {
+  makeTitle,
+  makeRightsHolder,
+  makeVenue,
+  makeRightsWindow,
+} = require('../../helpers/factories');
 const service = require('../../../src/services/rightsService');
 
 describe('rights windows', () => {

@@ -10,8 +10,18 @@ const authService = require('../../services/authService');
  */
 
 const HOLDERS = [
-  { name: 'Park Circus', kind: 'distributor', remittanceCurrency: 'GBP', territoriesRepresented: ['GB', 'IE'] },
-  { name: 'BFI National Archive', kind: 'archive', remittanceCurrency: 'GBP', territoriesRepresented: ['GB'] },
+  {
+    name: 'Park Circus',
+    kind: 'distributor',
+    remittanceCurrency: 'GBP',
+    territoriesRepresented: ['GB', 'IE'],
+  },
+  {
+    name: 'BFI National Archive',
+    kind: 'archive',
+    remittanceCurrency: 'GBP',
+    territoriesRepresented: ['GB'],
+  },
 ];
 
 const VENUES = [
@@ -20,7 +30,11 @@ const VENUES = [
     name: 'Prince Charles Cinema',
     city: 'London',
     seats: 288,
-    booth: { gauges: ['35mm', '70mm'], soundFormats: ['optical-mono', 'dolby-sr'], reelCapacity: 8 },
+    booth: {
+      gauges: ['35mm', '70mm'],
+      soundFormats: ['optical-mono', 'dolby-sr'],
+      reelCapacity: 8,
+    },
   },
   {
     code: 'GB-GLA-GFT',
@@ -39,7 +53,13 @@ const VENUES = [
 ];
 
 const TITLES = [
-  { slug: 'the-red-shoes', title: 'The Red Shoes', year: 1948, runtimeMinutes: 135, director: 'Michael Powell' },
+  {
+    slug: 'the-red-shoes',
+    title: 'The Red Shoes',
+    year: 1948,
+    runtimeMinutes: 135,
+    director: 'Michael Powell',
+  },
   { slug: 'daisies', title: 'Daisies', year: 1966, runtimeMinutes: 74, director: 'Vera Chytilova' },
   { slug: 'el-sur', title: 'El Sur', year: 1983, runtimeMinutes: 95, director: 'Victor Erice' },
 ];
@@ -53,7 +73,9 @@ async function seedHolders(RightsHolder) {
       {
         $setOnInsert: {
           ...holder,
-          contacts: [{ name: 'Bookings', email: `bookings@${holder.name.split(' ')[0].toLowerCase()}.test` }],
+          contacts: [
+            { name: 'Bookings', email: `bookings@${holder.name.split(' ')[0].toLowerCase()}.test` },
+          ],
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true },
@@ -76,11 +98,9 @@ module.exports = {
     const holders = await seedHolders(RightsHolder);
     out(`rights holders: ${holders.length}`);
 
-    const venues = [];
-    for (const venue of VENUES) {
-      // eslint-disable-next-line no-await-in-loop
-      venues.push(
-        await Venue.findOneAndUpdate(
+    const venues = await Promise.all(
+      VENUES.map((venue) =>
+        Venue.findOneAndUpdate(
           { code: venue.code },
           {
             $setOnInsert: {
@@ -98,8 +118,8 @@ module.exports = {
           },
           { upsert: true, new: true, setDefaultsOnInsert: true },
         ),
-      );
-    }
+      ),
+    );
     out(`venues: ${venues.length}`);
 
     const vault = venues.find((venue) => venue.code === 'GB-BER-VAULT');

@@ -76,7 +76,11 @@ async function normaliseInspectionNotes({ client, noteText, element, onRetry = n
 
   return {
     extracted: { ...parsed.data, findings: kept, unclear },
-    fingerprint: fingerprint({ noteText: text, model: client.model, promptVersion: PROMPT_VERSION }),
+    fingerprint: fingerprint({
+      noteText: text,
+      model: client.model,
+      promptVersion: PROMPT_VERSION,
+    }),
     promptVersion: PROMPT_VERSION,
     requestedModel: client.model,
     model: answer.model,

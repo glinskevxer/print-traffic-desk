@@ -57,29 +57,42 @@ describe('venue endpoints', () => {
   it('refuses a shipping address in another territory', async () => {
     const res = await request(app)
       .post('/venues')
-      .send(body({ address: { line1: '1 Rue', city: 'Paris', postcode: '75001', territory: 'FR' } }))
+      .send(
+        body({ address: { line1: '1 Rue', city: 'Paris', postcode: '75001', territory: 'FR' } }),
+      )
       .expect(422);
 
     expect(res.body.error.message).toMatch(/must sit in the venue territory/);
   });
 
   it('refuses a booth with no gauge at all', async () => {
-    await request(app).post('/venues').send(body({ booth: { gauges: [] } })).expect(400);
+    await request(app)
+      .post('/venues')
+      .send(body({ booth: { gauges: [] } }))
+      .expect(400);
   });
 
   it('refuses a second house on the same code', async () => {
     await request(app).post('/venues').send(body()).expect(201);
 
-    const res = await request(app).post('/venues').send(body({ name: 'Other' })).expect(409);
+    const res = await request(app)
+      .post('/venues')
+      .send(body({ name: 'Other' }))
+      .expect(409);
 
     expect(res.body.error.message).toMatch(/already on file/);
   });
 
   it('filters the list by territory, gauge and nitrate certificate', async () => {
     await makeVenue({ code: 'GB-LON-BFI', booth: { gauges: ['35mm'], nitrateCertified: true } });
-    await makeVenue({ code: 'FR-PAR-CIN', territory: 'FR', city: 'Paris',
+    await makeVenue({
+      code: 'FR-PAR-CIN',
+      territory: 'FR',
+      city: 'Paris',
       address: { line1: '51 Rue de Bercy', city: 'Paris', postcode: '75012', territory: 'FR' },
-      timezone: 'Europe/Paris', booth: { gauges: ['16mm'] } });
+      timezone: 'Europe/Paris',
+      booth: { gauges: ['16mm'] },
+    });
 
     const gb = await request(app).get('/venues?territory=GB').expect(200);
     expect(gb.body.items).toHaveLength(1);

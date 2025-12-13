@@ -17,11 +17,21 @@ const creditSchema = z.object({
 const createBody = z.object({
   title: z.string().min(1).max(200),
   originalTitle: z.string().min(1).max(200).optional(),
-  slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120).optional(),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .max(120)
+    .optional(),
   year: z.number().int().min(1888).max(2100),
   credits: z.array(creditSchema).max(40).default([]),
-  countries: z.array(z.string().regex(/^[A-Z]{2}$/)).max(10).default([]),
-  originalLanguages: z.array(z.string().regex(/^[a-z]{2,3}$/)).max(10).default([]),
+  countries: z
+    .array(z.string().regex(/^[A-Z]{2}$/))
+    .max(10)
+    .default([]),
+  originalLanguages: z
+    .array(z.string().regex(/^[a-z]{2,3}$/))
+    .max(10)
+    .default([]),
   runtimeMinutes: z.number().int().min(1).max(1500).optional(),
   synopsis: z.string().max(4000).optional(),
   rightsHolderId: publicId('rh'),

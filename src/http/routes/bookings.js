@@ -75,7 +75,11 @@ function bookingRoutes() {
         ...bookingView(booking),
         element: { id: element.publicId, barcode: element.barcode, grade: element.conditionGrade },
         clearedUnder: decision.windowId,
-        traffic: { ...booking.traffic.toJSON(), outbound: plan.outbound.dates, back: plan.inbound.dates },
+        traffic: {
+          ...booking.traffic.toJSON(),
+          outbound: plan.outbound.dates,
+          back: plan.inbound.dates,
+        },
       });
     }),
   );

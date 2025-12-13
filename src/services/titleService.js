@@ -82,8 +82,16 @@ async function listTitles(query = {}) {
   });
 }
 
-const EDITABLE = ['title', 'originalTitle', 'year', 'credits', 'countries', 'originalLanguages',
-  'runtimeMinutes', 'synopsis'];
+const EDITABLE = [
+  'title',
+  'originalTitle',
+  'year',
+  'credits',
+  'countries',
+  'originalLanguages',
+  'runtimeMinutes',
+  'synopsis',
+];
 
 async function updateTitle(publicId, patch) {
   const title = await getTitle(publicId);

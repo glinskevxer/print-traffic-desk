@@ -127,7 +127,10 @@ describe('shipment endpoints', () => {
   });
 
   it('refuses a service the desk does not book at all', async () => {
-    await request(app).post('/shipments').send(planBody({ service: 'pigeon' })).expect(400);
+    await request(app)
+      .post('/shipments')
+      .send(planBody({ service: 'pigeon' }))
+      .expect(400);
   });
 
   it('answers 404 for a leg that is not there', async () => {

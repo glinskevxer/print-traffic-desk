@@ -12,7 +12,10 @@ const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
 
 function encodeCursor({ sortValue, id }) {
-  const payload = JSON.stringify({ v: sortValue instanceof Date ? sortValue.toISOString() : sortValue, i: String(id) });
+  const payload = JSON.stringify({
+    v: sortValue instanceof Date ? sortValue.toISOString() : sortValue,
+    i: String(id),
+  });
   return Buffer.from(payload, 'utf8').toString('base64url');
 }
 

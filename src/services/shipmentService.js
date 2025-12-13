@@ -27,7 +27,15 @@ async function loadShipment(publicId, session = null) {
  * from the caller, because a client that worked out its own dates last week is
  * planning against last week's calendar.
  */
-async function planLeg({ elementId, toVenueId, leg, screeningLocalDate, today, service, holdDays = 1 }) {
+async function planLeg({
+  elementId,
+  toVenueId,
+  leg,
+  screeningLocalDate,
+  today,
+  service,
+  holdDays = 1,
+}) {
   const { PrintElement, Venue, Shipment } = models();
 
   return withTransaction(async (session) => {

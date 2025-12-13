@@ -143,7 +143,11 @@ describe('condition grading', () => {
   });
 
   it('always sends nitrate to a certified booth', () => {
-    const result = assessCondition({ findings: [], footage: FEATURE_FOOTAGE, baseStock: 'nitrate' });
+    const result = assessCondition({
+      findings: [],
+      footage: FEATURE_FOOTAGE,
+      baseStock: 'nitrate',
+    });
 
     expect(result.restrictions).toEqual(['nitrate-booth']);
     expect(result.verdict).toBe('projectable-with-restrictions');

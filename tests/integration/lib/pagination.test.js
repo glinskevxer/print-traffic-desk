@@ -20,8 +20,13 @@ describe('paging a collection', () => {
   beforeEach(async () => {
     await clearCollections();
     holderId = (await makeRightsHolder())._id;
-    for (const slug of ['a-nos-amours', 'black-narcissus', 'celine-and-julie', 'daisies', 'el-sur']) {
-       
+    for (const slug of [
+      'a-nos-amours',
+      'black-narcissus',
+      'celine-and-julie',
+      'daisies',
+      'el-sur',
+    ]) {
       await makeTitle({ slug, rightsHolder: holderId });
     }
   });
@@ -32,7 +37,6 @@ describe('paging a collection', () => {
     let guard = 0;
 
     do {
-       
       const page = await paginate(Title, { sortField: 'slug', limit: 2, cursor });
       seen.push(...page.items.map((item) => item.slug));
       cursor = page.nextCursor;
@@ -67,7 +71,11 @@ describe('paging a collection', () => {
     const first = await paginate(Title, { sortField: 'slug', limit: 2 });
     await makeTitle({ slug: 'aaa-inserted-behind', rightsHolder: holderId });
 
-    const second = await paginate(Title, { sortField: 'slug', limit: 10, cursor: first.nextCursor });
+    const second = await paginate(Title, {
+      sortField: 'slug',
+      limit: 10,
+      cursor: first.nextCursor,
+    });
 
     expect(second.items.map((i) => i.slug)).toEqual(['celine-and-julie', 'daisies', 'el-sur']);
   });
@@ -76,14 +84,12 @@ describe('paging a collection', () => {
     await clearCollections();
     const holder = await makeRightsHolder();
     for (let i = 0; i < 6; i += 1) {
-       
       await makeTitle({ slug: `tie-${i}`, year: 1948, rightsHolder: holder._id });
     }
 
     const seen = [];
     let cursor;
     do {
-       
       const page = await paginate(Title, { sortField: 'year', limit: 2, cursor });
       seen.push(...page.items.map((item) => item.slug));
       cursor = page.nextCursor;

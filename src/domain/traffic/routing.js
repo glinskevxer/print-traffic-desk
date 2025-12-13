@@ -43,14 +43,21 @@ function planOutbound({
     : fastestPermitted({ fromTerritory, toTerritory, restrictions, baseStock });
 
   if (!quote) {
-    return infeasible('no-service', 'nothing this element is allowed to travel by reaches that house');
+    return infeasible(
+      'no-service',
+      'nothing this element is allowed to travel by reaches that house',
+    );
   }
 
   const laneOpen = workingDayAcross([fromTerritory, toTerritory]);
   const originOpen = workingDayIn(fromTerritory);
 
   // The print has to be in the building before the house needs it in the booth.
-  const arriveBy = subtractWorkingDays(screeningLocalDate, inboundLeadDays, workingDayIn(toTerritory));
+  const arriveBy = subtractWorkingDays(
+    screeningLocalDate,
+    inboundLeadDays,
+    workingDayIn(toTerritory),
+  );
   const dispatchOn = subtractWorkingDays(arriveBy, quote.totalDays, laneOpen);
   const readyBy = subtractWorkingDays(dispatchOn, outboundLeadDays, originOpen);
   const inspectionStartsOn = subtractWorkingDays(readyBy, inspectionDays, originOpen);

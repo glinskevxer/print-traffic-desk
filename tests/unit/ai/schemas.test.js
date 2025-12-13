@@ -44,9 +44,9 @@ describe('what the model is allowed to have said', () => {
   });
 
   it('refuses a kind of exhibition nobody sells', () => {
-    expect(
-      licenceTermsSchema.safeParse(licence({ exhibitionTypes: ['streaming'] })).success,
-    ).toBe(false);
+    expect(licenceTermsSchema.safeParse(licence({ exhibitionTypes: ['streaming'] })).success).toBe(
+      false,
+    );
   });
 
   it('refuses a licence that ends before it starts', () => {
@@ -84,7 +84,9 @@ describe('what the model is allowed to have said', () => {
 
   it('keeps what the model could not read', () => {
     const parsed = licenceTermsSchema.parse(
-      licence({ unclear: [{ field: 'maxScreenings', why: 'the clause says a reasonable number' }] }),
+      licence({
+        unclear: [{ field: 'maxScreenings', why: 'the clause says a reasonable number' }],
+      }),
     );
 
     expect(parsed.unclear).toHaveLength(1);

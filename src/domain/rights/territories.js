@@ -9,8 +9,33 @@ const { ValidationError } = require('../../lib/errors');
  */
 
 const EU = Object.freeze([
-  'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE',
-  'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
+  'AT',
+  'BE',
+  'BG',
+  'CY',
+  'CZ',
+  'DE',
+  'DK',
+  'EE',
+  'ES',
+  'FI',
+  'FR',
+  'GR',
+  'HR',
+  'HU',
+  'IE',
+  'IT',
+  'LT',
+  'LU',
+  'LV',
+  'MT',
+  'NL',
+  'PL',
+  'PT',
+  'RO',
+  'SE',
+  'SI',
+  'SK',
 ]);
 
 const EEA = Object.freeze([...EU, 'IS', 'LI', 'NO']);

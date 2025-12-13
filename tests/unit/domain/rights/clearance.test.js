@@ -54,7 +54,10 @@ describe('clearing a screening', () => {
     const anglophone = licence({ publicId: 'rw_UKIE0000000000', territory: 'UK-IE' });
     const worldwide = licence({ publicId: 'rw_WORLD000000000', territory: 'WORLD' });
 
-    const result = clearScreening({ windows: [worldwide, anglophone, national], request: request() });
+    const result = clearScreening({
+      windows: [worldwide, anglophone, national],
+      request: request(),
+    });
 
     expect(result.windowId).toBe('rw_NATIONAL000000');
     expect(result.alternatives).toEqual(['rw_UKIE0000000000', 'rw_WORLD000000000']);

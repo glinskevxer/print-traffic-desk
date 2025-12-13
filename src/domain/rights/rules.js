@@ -25,7 +25,10 @@ function statusRule(window) {
     return fail('status', 'this licence is still a draft and grants nothing');
   }
   if (window.status === 'suspended') {
-    return fail('status', `this licence is suspended: ${window.suspendedReason || 'no reason given'}`);
+    return fail(
+      'status',
+      `this licence is suspended: ${window.suspendedReason || 'no reason given'}`,
+    );
   }
   return fail('status', 'this licence has expired');
 }

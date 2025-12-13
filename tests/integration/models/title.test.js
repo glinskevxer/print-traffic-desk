@@ -121,7 +121,12 @@ describe('title and rights holder models', () => {
 
   it('keeps slugs unique', async () => {
     const holder = await makeHolder();
-    const base = { slug: 'peeping-tom', title: 'Peeping Tom', year: 1960, rightsHolder: holder._id };
+    const base = {
+      slug: 'peeping-tom',
+      title: 'Peeping Tom',
+      year: 1960,
+      rightsHolder: holder._id,
+    };
     await Title.create(base);
 
     await expect(Title.create(base)).rejects.toThrow(/duplicate key/);

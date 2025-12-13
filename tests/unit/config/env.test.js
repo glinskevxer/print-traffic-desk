@@ -90,9 +90,9 @@ describe('extraction settings', () => {
   });
 
   it('refuses a key too short to be one', () => {
-    expect(() =>
-      parseEnv({ ...base, EXTRACTION_ENABLED: 'true', OPENAI_API_KEY: 'sk-1' }),
-    ).toThrow(/OPENAI_API_KEY/);
+    expect(() => parseEnv({ ...base, EXTRACTION_ENABLED: 'true', OPENAI_API_KEY: 'sk-1' })).toThrow(
+      /OPENAI_API_KEY/,
+    );
   });
 
   it('refuses a base url that is not a url', () => {
@@ -100,7 +100,8 @@ describe('extraction settings', () => {
   });
 
   it('holds a daily token budget', () => {
-    expect(parseEnv({ ...base, EXTRACTION_DAILY_TOKEN_BUDGET: '1000' }).extraction.dailyTokenBudget)
-      .toBe(1000);
+    expect(
+      parseEnv({ ...base, EXTRACTION_DAILY_TOKEN_BUDGET: '1000' }).extraction.dailyTokenBudget,
+    ).toBe(1000);
   });
 });

@@ -89,10 +89,7 @@ describe('element availability', () => {
   });
 
   it('offers the first date the print is free for long enough', () => {
-    const spans = [
-      span('2025-06-16', '2025-06-25', 'a'),
-      span('2025-06-28', '2025-07-04', 'b'),
-    ];
+    const spans = [span('2025-06-16', '2025-06-25', 'a'), span('2025-06-28', '2025-07-04', 'b')];
 
     expect(nextFreeFrom(spans, '2025-06-16', 2)).toBe('2025-06-26');
     expect(nextFreeFrom(spans, '2025-06-16', 5)).toBe('2025-07-05');
@@ -100,20 +97,14 @@ describe('element availability', () => {
   });
 
   it('counts the days a print was spoken for inside a period', () => {
-    const spans = [
-      span('2025-06-16', '2025-06-20', 'a'),
-      span('2025-06-25', '2025-07-05', 'b'),
-    ];
+    const spans = [span('2025-06-16', '2025-06-20', 'a'), span('2025-06-25', '2025-07-05', 'b')];
 
     expect(daysCommitted(spans, '2025-06-01', '2025-06-30')).toBe(11);
     expect(daysCommitted(spans, '2025-08-01', '2025-08-31')).toBe(0);
   });
 
   it('does not double count overlapping commitments', () => {
-    const spans = [
-      span('2025-06-01', '2025-06-10', 'a'),
-      span('2025-06-05', '2025-06-15', 'b'),
-    ];
+    const spans = [span('2025-06-01', '2025-06-10', 'a'), span('2025-06-05', '2025-06-15', 'b')];
 
     expect(daysCommitted(spans, '2025-06-01', '2025-06-30')).toBe(15);
   });

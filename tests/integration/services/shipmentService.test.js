@@ -90,7 +90,9 @@ describe('print traffic', () => {
 
   it('refuses a date the work can no longer start for', async () => {
     await expect(
-      service.planLeg(plan({ screeningLocalDate: '2025-05-16', today: '2025-05-15', service: 'road-freight' })),
+      service.planLeg(
+        plan({ screeningLocalDate: '2025-05-16', today: '2025-05-15', service: 'road-freight' }),
+      ),
     ).rejects.toThrow(/already past/);
   });
 
@@ -135,7 +137,12 @@ describe('print traffic', () => {
     await element.save();
 
     const { shipment } = await service.planLeg(
-      plan({ toVenueId: home.publicId, leg: 'return', screeningLocalDate: '2025-06-20', today: '2025-06-20' }),
+      plan({
+        toVenueId: home.publicId,
+        leg: 'return',
+        screeningLocalDate: '2025-06-20',
+        today: '2025-06-20',
+      }),
     );
     await service.dispatch(shipment.publicId, { dispatchedOn: '2025-06-23' });
     const result = await service.markArrived(shipment.publicId, { arrivedOn: '2025-06-25' });
@@ -158,7 +165,12 @@ describe('print traffic', () => {
 
     const result = await service.markArrived(shipment.publicId, {
       arrivedOn: '2025-06-18',
-      arrivalCheck: { checkedBy: 'A. Novak', cansReceived: 5, sealsIntact: false, notes: 'reel 4 missing' },
+      arrivalCheck: {
+        checkedBy: 'A. Novak',
+        cansReceived: 5,
+        sealsIntact: false,
+        notes: 'reel 4 missing',
+      },
     });
 
     expect(result.shipment.arrivalCheck.cansReceived).toBe(5);

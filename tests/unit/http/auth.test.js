@@ -43,11 +43,15 @@ describe('who is allowed to do what', () => {
   });
 
   it('lets a role through when it is named', async () => {
-    expect(await run(requireRole('traffic'), { operator: operator({ role: 'traffic' }) })).toBeUndefined();
+    expect(
+      await run(requireRole('traffic'), { operator: operator({ role: 'traffic' }) }),
+    ).toBeUndefined();
   });
 
   it('lets a role through a gate it covers', async () => {
-    expect(await run(requireRole('viewer'), { operator: operator({ role: 'admin' }) })).toBeUndefined();
+    expect(
+      await run(requireRole('viewer'), { operator: operator({ role: 'admin' }) }),
+    ).toBeUndefined();
     expect(
       await run(requireRole('viewer'), { operator: operator({ role: 'archivist' }) }),
     ).toBeUndefined();
@@ -66,12 +70,19 @@ describe('who is allowed to do what', () => {
 
     expect(await run(gate, { operator: operator({ role: 'traffic' }) })).toBeUndefined();
     expect(await run(gate, { operator: operator({ role: 'archivist' }) })).toBeUndefined();
-    expect(await run(gate, { operator: operator({ role: 'viewer' }) })).toBeInstanceOf(ForbiddenError);
+    expect(await run(gate, { operator: operator({ role: 'viewer' }) })).toBeInstanceOf(
+      ForbiddenError,
+    );
   });
 
   it('needs an operator at all', async () => {
     expect(await run(requireRole('viewer'), {})).toBeInstanceOf(NotAuthenticatedError);
-    expect(await run(requireOwnVenue(() => 'x'), {})).toBeInstanceOf(NotAuthenticatedError);
+    expect(
+      await run(
+        requireOwnVenue(() => 'x'),
+        {},
+      ),
+    ).toBeInstanceOf(NotAuthenticatedError);
   });
 
   it('lets an unbound operator act for any house', async () => {
@@ -89,7 +100,9 @@ describe('who is allowed to do what', () => {
     const gate = requireOwnVenue((req) => req.params.venueId);
     const bound = operator({ role: 'programmer', venue: 'venue-prince' });
 
-    expect(await run(gate, { operator: bound, params: { venueId: 'venue-prince' } })).toBeUndefined();
+    expect(
+      await run(gate, { operator: bound, params: { venueId: 'venue-prince' } }),
+    ).toBeUndefined();
 
     const err = await run(gate, { operator: bound, params: { venueId: 'venue-bfi' } });
     expect(err).toBeInstanceOf(ForbiddenError);

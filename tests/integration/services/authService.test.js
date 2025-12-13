@@ -42,7 +42,9 @@ describe('signing an operator in', () => {
     expect(operator.toJSON().passwordHash).toBeUndefined();
 
     const { Operator } = models();
-    const stored = await Operator.findOne({ email: 'traffic@archive.test' }).select('+passwordHash');
+    const stored = await Operator.findOne({ email: 'traffic@archive.test' }).select(
+      '+passwordHash',
+    );
     expect(stored.passwordHash).not.toContain('a-long-enough-password');
   });
 
@@ -102,7 +104,6 @@ describe('signing an operator in', () => {
     await service.createOperator(account());
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
-       
       await expect(
         service.signIn({ email: 'traffic@archive.test', password: 'wrong-password-here' }),
       ).rejects.toThrow(NotAuthenticatedError);
@@ -116,7 +117,6 @@ describe('signing an operator in', () => {
   it('lets the operator back in once the lockout runs out', async () => {
     await service.createOperator(account());
     for (let attempt = 0; attempt < 3; attempt += 1) {
-       
       await service
         .signIn({ email: 'traffic@archive.test', password: 'wrong-password-here' })
         .catch(() => {});

@@ -62,7 +62,10 @@ function restrictionChecks(element, venue) {
     problems.push({ rule: 'platter', detail: `${venue.code} can only run from a platter` });
   }
   if (has(RESTRICTIONS.ARCHIVE_PROJECTIONIST_ONLY) && !venue.booth.projectionistOnStaff) {
-    problems.push({ rule: 'projectionist', detail: `${venue.code} keeps no projectionist on staff` });
+    problems.push({
+      rule: 'projectionist',
+      detail: `${venue.code} keeps no projectionist on staff`,
+    });
   }
   if (has(RESTRICTIONS.NITRATE_BOOTH) && !venue.booth.nitrateCertified) {
     problems.push({ rule: 'nitrate-booth', detail: `${venue.code} holds no nitrate certificate` });

@@ -12,7 +12,15 @@ const SEVERITIES = Object.freeze(['minor', 'moderate', 'severe']);
 
 const SEVERITY_MULTIPLIER = Object.freeze({ minor: 1, moderate: 3, severe: 9 });
 
-const AREAS = Object.freeze(['perforation', 'splice', 'emulsion', 'base', 'edge', 'chemical', 'sound']);
+const AREAS = Object.freeze([
+  'perforation',
+  'splice',
+  'emulsion',
+  'base',
+  'edge',
+  'chemical',
+  'sound',
+]);
 
 /**
  * weight is the damage a single moderate finding of this kind contributes.
@@ -30,10 +38,10 @@ const DAMAGE_CODES = Object.freeze({
   'SCRATCH-EMULSION': { area: 'emulsion', weight: 6, label: 'emulsion side scratch' },
   'TRAM-LINES': { area: 'base', weight: 5, label: 'continuous tram lines' },
   'EDGE-WAVE': { area: 'edge', weight: 7, label: 'edge wave' },
-  'BUCKLE': { area: 'base', weight: 8, label: 'buckled section' },
-  'BRITTLE': { area: 'base', weight: 10, label: 'brittle stock' },
-  'VINEGAR': { area: 'chemical', weight: 11, label: 'vinegar odour' },
-  'MOULD': { area: 'chemical', weight: 9, label: 'mould growth' },
+  BUCKLE: { area: 'base', weight: 8, label: 'buckled section' },
+  BRITTLE: { area: 'base', weight: 10, label: 'brittle stock' },
+  VINEGAR: { area: 'chemical', weight: 11, label: 'vinegar odour' },
+  MOULD: { area: 'chemical', weight: 9, label: 'mould growth' },
   'WATER-STAIN': { area: 'chemical', weight: 4, label: 'water staining' },
   'COLOUR-FADE': { area: 'emulsion', weight: 3, label: 'dye fading' },
   'SOUND-SCRATCH': { area: 'sound', weight: 6, label: 'scratched sound track' },
@@ -50,7 +58,11 @@ const SEVERE_RESTRICTIONS = Object.freeze({
   'SPLICE-WEAK': [RESTRICTIONS.CHANGEOVER_ONLY, RESTRICTIONS.ARCHIVE_PROJECTIONIST_ONLY],
   'EDGE-WAVE': [RESTRICTIONS.NO_PLATTER],
   BUCKLE: [RESTRICTIONS.NO_PLATTER, RESTRICTIONS.REDUCED_SPEED],
-  BRITTLE: [RESTRICTIONS.NO_PLATTER, RESTRICTIONS.ARCHIVE_PROJECTIONIST_ONLY, RESTRICTIONS.HAND_CARRY_ONLY],
+  BRITTLE: [
+    RESTRICTIONS.NO_PLATTER,
+    RESTRICTIONS.ARCHIVE_PROJECTIONIST_ONLY,
+    RESTRICTIONS.HAND_CARRY_ONLY,
+  ],
   VINEGAR: [RESTRICTIONS.NO_TRAVEL_ABROAD],
   MOULD: [RESTRICTIONS.ARCHIVE_PROJECTIONIST_ONLY],
 });

@@ -63,7 +63,6 @@ describe('holding a caller to a rate', () => {
     const { app } = buildTestApp({ limits });
 
     for (let call = 0; call < 3; call += 1) {
-       
       await request(app).get('/titles').expect(200);
     }
 
@@ -81,7 +80,6 @@ describe('holding a caller to a rate', () => {
     }).app;
 
     for (let call = 0; call < 3; call += 1) {
-       
       await request(one).get('/titles').expect(200);
     }
 
@@ -106,7 +104,6 @@ describe('holding a caller to a rate', () => {
     const { app } = buildTestApp({ limits });
 
     for (let call = 0; call < 6; call += 1) {
-       
       await request(app).get('/health/live').expect(200);
     }
   });

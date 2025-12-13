@@ -4,7 +4,14 @@ const { Schema } = require('mongoose');
 const { basePlugin } = require('./plugins/base');
 const { EXTRACTION_KINDS } = require('../ai/schemas');
 
-const JOB_STATUSES = Object.freeze(['queued', 'running', 'succeeded', 'failed', 'applied', 'rejected']);
+const JOB_STATUSES = Object.freeze([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'applied',
+  'rejected',
+]);
 
 const usageSchema = new Schema(
   {

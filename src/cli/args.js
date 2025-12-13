@@ -41,7 +41,9 @@ function parseArgs(argv, spec = {}) {
 
     const value = inlineValue !== undefined ? inlineValue : argv[++i];
     if (value === undefined) {
-      throw new ValidationError(`--${name} needs a value`, [{ key: name, problem: 'missing value' }]);
+      throw new ValidationError(`--${name} needs a value`, [
+        { key: name, problem: 'missing value' },
+      ]);
     }
     options[name] = coerce(value, definition.type);
   }
@@ -66,7 +68,9 @@ function coerce(value, type) {
   if (type === 'number') {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) {
-      throw new ValidationError(`${value} is not a number`, [{ key: 'value', problem: 'not a number' }]);
+      throw new ValidationError(`${value} is not a number`, [
+        { key: 'value', problem: 'not a number' },
+      ]);
     }
     return parsed;
   }

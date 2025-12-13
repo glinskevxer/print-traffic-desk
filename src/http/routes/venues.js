@@ -22,7 +22,10 @@ const addressSchema = z.object({
 const boothSchema = z.object({
   gauges: z.array(z.enum(GAUGES)).min(1).max(6),
   soundFormats: z.array(z.enum(SOUND_FORMATS)).max(10).default(['optical-mono']),
-  speeds: z.array(z.union(PROJECTION_SPEEDS.map((s) => z.literal(s)))).max(5).default([24]),
+  speeds: z
+    .array(z.union(PROJECTION_SPEEDS.map((s) => z.literal(s))))
+    .max(5)
+    .default([24]),
   platterEquipped: z.boolean().default(false),
   changeoverCapable: z.boolean().default(true),
   nitrateCertified: z.boolean().default(false),
@@ -64,8 +67,14 @@ const listVenuesQuery = listQuery.extend({
   territory: territory.optional(),
   city: z.string().min(1).max(80).optional(),
   gauge: z.enum(GAUGES).optional(),
-  nitrateCertified: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
-  active: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  nitrateCertified: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  active: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   sortBy: z.enum(['code', 'name', 'createdAt']).default('code'),
 });
 
@@ -128,7 +137,10 @@ function venueRoutes() {
     requireRole('admin'),
     validate({ params: venueParams, body: z.object({ active: z.boolean() }) }),
     asyncHandler(async (req, res) => {
-      const venue = await venueService.setVenueActive(req.valid.params.venueId, req.valid.body.active);
+      const venue = await venueService.setVenueActive(
+        req.valid.params.venueId,
+        req.valid.body.active,
+      );
       res.json(venue.toJSON());
     }),
   );

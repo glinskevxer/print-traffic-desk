@@ -25,7 +25,10 @@ const createOperatorBody = z.object({
 
 const listOperatorsQuery = listQuery.extend({
   role: z.enum(ROLES).optional(),
-  active: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  active: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
 });
 
 function authRoutes() {

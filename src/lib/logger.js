@@ -56,7 +56,6 @@ let rootLogger = null;
 
 function logger() {
   if (!rootLogger) {
-     
     const { config } = require('../config/env');
     const cfg = config();
     rootLogger = createLogger({

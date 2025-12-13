@@ -63,9 +63,9 @@ describe('venue model', () => {
   });
 
   it('refuses a booth that runs no gauge at all', async () => {
-    await expect(Venue.create({ ...prince, booth: { ...prince.booth, gauges: [] } })).rejects.toThrow(
-      /at least one gauge/,
-    );
+    await expect(
+      Venue.create({ ...prince, booth: { ...prince.booth, gauges: [] } }),
+    ).rejects.toThrow(/at least one gauge/);
   });
 
   it('refuses a gauge outside the vocabulary', async () => {

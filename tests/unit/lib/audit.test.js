@@ -17,11 +17,9 @@ describe('audit change lists', () => {
   });
 
   it('narrows to the fields worth auditing when told which', () => {
-    const changes = diffFields(
-      { status: 'a', updatedAt: 1 },
-      { status: 'b', updatedAt: 2 },
-      ['status'],
-    );
+    const changes = diffFields({ status: 'a', updatedAt: 1 }, { status: 'b', updatedAt: 2 }, [
+      'status',
+    ]);
 
     expect(changes).toHaveLength(1);
   });

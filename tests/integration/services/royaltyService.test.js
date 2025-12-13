@@ -29,7 +29,11 @@ describe('royalty statements', () => {
   beforeEach(async () => {
     await clearCollections();
     holder = await makeRightsHolder({ name: 'Park Circus', settlementDays: 45 });
-    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable', slug: 'the-red-shoes' });
+    title = await makeTitle({
+      rightsHolder: holder._id,
+      status: 'bookable',
+      slug: 'the-red-shoes',
+    });
     venue = await makeVenue({ code: 'GB-LON-PRINCE', seats: 288 });
     vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
     await makeRightsWindow({

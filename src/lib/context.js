@@ -42,4 +42,11 @@ function withContext(extra, work) {
   return runWithContext({ ...currentContext(), ...extra }, work);
 }
 
-module.exports = { runWithContext, withContext, currentContext, currentActor, currentRequestId, EMPTY };
+module.exports = {
+  runWithContext,
+  withContext,
+  currentContext,
+  currentActor,
+  currentRequestId,
+  EMPTY,
+};

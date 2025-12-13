@@ -27,7 +27,11 @@ async function loadBooking(publicId, session = null) {
 async function screeningsTakenAt(titleId, venueId, session) {
   const { Booking } = models();
   return Booking.countDocuments(
-    { title: titleId, venue: venueId, status: { $in: ['held', 'cleared', 'confirmed', 'settled'] } },
+    {
+      title: titleId,
+      venue: venueId,
+      status: { $in: ['held', 'cleared', 'confirmed', 'settled'] },
+    },
     { session },
   );
 }
@@ -148,7 +152,10 @@ async function requestBooking(input) {
     }
     if (!chosen) {
       throw new RuleRefusedError('no print of this title can play at this house', {
-        rejected: rejected.map((each) => ({ element: each.element.publicId, problems: each.problems })),
+        rejected: rejected.map((each) => ({
+          element: each.element.publicId,
+          problems: each.problems,
+        })),
         unavailable: unavailable.map((each) => each.publicId),
       });
     }
@@ -223,11 +230,7 @@ async function requestBooking(input) {
       }
     });
 
-    await RightsWindow.updateOne(
-      { _id: window._id },
-      { $inc: { screeningsUsed: 1 } },
-      { session },
-    );
+    await RightsWindow.updateOne({ _id: window._id }, { $inc: { screeningsUsed: 1 } }, { session });
 
     await audit.record(
       {
@@ -337,7 +340,9 @@ async function releaseBooking(booking, { session, nextStatus, reason, feeMinor }
 
   const openLegs = await Shipment.find(
     {
-      _id: { $in: [booking.traffic.outboundShipment, booking.traffic.returnShipment].filter(Boolean) },
+      _id: {
+        $in: [booking.traffic.outboundShipment, booking.traffic.returnShipment].filter(Boolean),
+      },
       status: 'planned',
     },
     null,
@@ -404,18 +409,18 @@ async function cancelBooking(publicId, { reason, feeMinor }) {
  */
 async function lapseExpiredHolds(now = new Date()) {
   const { Booking } = models();
-  const expired = await Booking.find({ status: "held", holdExpiresAt: { $lte: now } }).limit(200);
+  const expired = await Booking.find({ status: 'held', holdExpiresAt: { $lte: now } }).limit(200);
 
   const lapsed = [];
   for (const held of expired) {
     // eslint-disable-next-line no-await-in-loop
     await withTransaction(async (session) => {
       const booking = await loadBooking(held.publicId, session);
-      if (booking.status !== "held") return;
+      if (booking.status !== 'held') return;
       await releaseBooking(booking, {
         session,
-        nextStatus: "lapsed",
-        reason: "the hold ran out",
+        nextStatus: 'lapsed',
+        reason: 'the hold ran out',
       });
       lapsed.push(booking.publicId);
     });

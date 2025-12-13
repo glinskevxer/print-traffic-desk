@@ -75,7 +75,12 @@ describe('licence territories', () => {
   });
 
   it('puts the tightest licence first', () => {
-    expect(narrowestFirst(['WORLD', 'EU', 'SE', 'NORDIC'])).toEqual(['SE', 'NORDIC', 'EU', 'WORLD']);
+    expect(narrowestFirst(['WORLD', 'EU', 'SE', 'NORDIC'])).toEqual([
+      'SE',
+      'NORDIC',
+      'EU',
+      'WORLD',
+    ]);
   });
 
   it('breaks a tie on breadth by name so the order is stable', () => {

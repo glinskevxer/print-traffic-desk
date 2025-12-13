@@ -90,7 +90,9 @@ describe('migrations', () => {
 
     const backfill = results.find((each) => each.id.startsWith('001'));
     expect(backfill.outcome.updated).toBe(1);
-    expect((await models().PrintElement.findById(element._id)).inspectionIntervalScreenings).toBe(6);
+    expect((await models().PrintElement.findById(element._id)).inspectionIntervalScreenings).toBe(
+      6,
+    );
   });
 
   it('upper cases the venue codes that were typed in lower case', async () => {
@@ -131,7 +133,9 @@ describe('migrations', () => {
 
     const results = await migrate();
 
-    expect(results.map((each) => each.id)).not.toContain('001-backfill-element-inspection-interval');
+    expect(results.map((each) => each.id)).not.toContain(
+      '001-backfill-element-inspection-interval',
+    );
     expect(results.length).toBeGreaterThanOrEqual(2);
   });
 });

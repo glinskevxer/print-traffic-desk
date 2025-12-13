@@ -66,7 +66,11 @@ describe('idempotent writes', () => {
     const { app } = buildApp();
 
     await request(app).post('/things').set('idempotency-key', 'short').send({}).expect(400);
-    await request(app).post('/things').set('idempotency-key', 'has spaces here').send({}).expect(400);
+    await request(app)
+      .post('/things')
+      .set('idempotency-key', 'has spaces here')
+      .send({})
+      .expect(400);
   });
 
   it('replays the first answer instead of doing the work twice', async () => {

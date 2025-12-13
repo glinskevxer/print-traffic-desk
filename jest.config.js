@@ -7,10 +7,12 @@ const shared = {
 };
 
 module.exports = {
-  testTimeout: 30000,
-  // One mongod serves the whole integration run. Past four workers the suites
-  // spend longer queueing behind each other than they do asserting.
-  maxWorkers: 4,
+  // One mongod serves the whole integration run, so the limit on the suite is
+  // that server rather than this machine's cores. Past three workers the
+  // suites queue behind each other and the slowest ones time out in a hook,
+  // which reads as a broken test and is not one.
+  testTimeout: 60000,
+  maxWorkers: 3,
   collectCoverageFrom: ['src/**/*.js'],
   coverageDirectory: 'coverage',
   projects: [
