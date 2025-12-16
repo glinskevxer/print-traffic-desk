@@ -1,0 +1,116 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # The dependency audit is worth running even in a week nobody pushed.
+    - cron: '17 6 * * 1'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20.18.1'
+
+jobs:
+  lint:
+    name: lint and format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: eslint
+        run: npx eslint src tests scripts --max-warnings=0
+      - name: prettier
+        run: npx prettier --check src tests scripts
+
+  test:
+    name: tests on node ${{ matrix.node }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.18.1', '22.12.0']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # mongodb-memory-server downloads a mongod once and caches it. Without
+      # this the integration job spends two minutes on every run fetching it.
+      - name: cache the mongod binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongod-${{ runner.os }}-7.0
+      - name: unit tests
+        run: npx jest --selectProjects unit --ci
+      - name: integration tests
+        run: npx jest --selectProjects integration --ci
+        env:
+          MONGOMS_VERSION: 7.0.14
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongod-${{ runner.os }}-7.0
+      - run: npx jest --coverage --ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  image:
+    name: build and smoke the image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: docker build --target runtime -t printdesk:ci .
+      # The image is worth nothing if it cannot start, and a broken CMD is not
+      # something the tests would ever catch.
+      - name: the command line runs inside the image
+        run: docker run --rm printdesk:ci node src/cli/index.js help
+      - name: the desk refuses to start without a database
+        run: |
+          if docker run --rm -e MONGO_URI=mongodb://127.0.0.1:1/none \
+               -e MONGO_SERVER_SELECTION_TIMEOUT_MS=1000 \
+               -e AUTH_JWT_SECRET=a-secret-that-is-long-enough-for-ci \
+               printdesk:ci; then
+            echo "the desk started without a database, which it should not"
+            exit 1
+          fi
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: advisories in what ships
+        run: npm audit --omit=dev --audit-level=high
