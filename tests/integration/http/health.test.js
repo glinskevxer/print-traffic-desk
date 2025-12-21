@@ -108,3 +108,22 @@ describe('health endpoints', () => {
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
 });
+
+describe('the published description of the api', () => {
+  it('is readable without a token', async () => {
+    const { app } = buildTestApp({ operator: null });
+
+    const res = await request(app).get('/health/openapi.json').expect(200);
+
+    expect(res.body.openapi).toBe('3.1.0');
+    expect(res.body.paths['/bookings']).toBeDefined();
+  });
+
+  it('names the host it was fetched from as the server', async () => {
+    const { app } = buildTestApp();
+
+    const res = await request(app).get('/health/openapi.json').expect(200);
+
+    expect(res.body.servers[0].url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  });
+});

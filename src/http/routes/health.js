@@ -2,6 +2,7 @@
 
 const { Router } = require('express');
 const { isConnected, ping } = require('../../db/connection');
+const { openapiDocument } = require('../openapi');
 
 /**
  * Two endpoints on purpose. Liveness says the process is up, readiness says it
@@ -25,6 +26,12 @@ function healthRoutes({ version, startedAt }) {
     } catch (err) {
       return res.status(503).json({ status: 'not-ready', checks: { mongo: err.message } });
     }
+  });
+
+  // The description of the API sits beside health because both are open: a
+  // client generator should not need a session to read the shape of the desk.
+  router.get('/openapi.json', (req, res) => {
+    res.json(openapiDocument({ servers: [{ url: `${req.protocol}://${req.get('host')}` }] }));
   });
 
   router.get('/version', (_req, res) => {
