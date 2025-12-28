@@ -8,6 +8,7 @@ const { rateLimit } = require('./middleware/rateLimit');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');
 const { authRoutes } = require('./routes/auth');
+const { metricsRoutes } = require('./routes/metrics');
 const { titleRoutes } = require('./routes/titles');
 const { venueRoutes } = require('./routes/venues');
 const { rightsHolderRoutes } = require('./routes/rightsHolders');
@@ -19,6 +20,7 @@ const { bookingRoutes } = require('./routes/bookings');
 const { royaltyRoutes } = require('./routes/royalties');
 const { extractionRoutes } = require('./routes/extraction');
 const { logger } = require('../lib/logger');
+const { installDefaults } = require('../lib/metrics');
 const { version } = require('../../package.json');
 
 /**
@@ -45,12 +47,14 @@ function createApp({
   // The origin check runs after the request context, because refusing an
   // origin raises a desk error and the error handler logs against req.log.
   app.use(requestContext({ logger: log || logger() }));
+  installDefaults();
   app.use(requestLogging());
   app.use(crossOrigin(allowedOrigins));
   app.use(express.json({ limit: bodyLimit }));
   app.use(rejectMongoOperators());
 
   app.use('/health', healthRoutes({ version, startedAt }));
+  app.use('/metrics', metricsRoutes());
   if (limits) {
     // Sign in is limited far harder than the rest, and by address rather than
     // by operator, because the caller has not proved who they are yet.

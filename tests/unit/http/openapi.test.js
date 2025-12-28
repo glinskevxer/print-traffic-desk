@@ -92,3 +92,32 @@ describe('the description of the api', () => {
     expect(Object.keys(csv.responses['200'].content)).toEqual(['text/csv']);
   });
 });
+
+describe('the metric label for a route', () => {
+  const { routeLabel } = require('../../../src/http/middleware/requestContext');
+
+  it('folds a public id out of the path', () => {
+    expect(routeLabel({ originalUrl: '/titles/ttl_0123456789ABCDEF' })).toBe('/titles/:id');
+    expect(routeLabel({ originalUrl: '/elements/elem_0123456789ABCDEF/inspections' })).toBe(
+      '/elements/:id/inspections',
+    );
+  });
+
+  it('folds a booking reference and a barcode out too', () => {
+    expect(routeLabel({ originalUrl: '/bookings/BK-2025-171-0123' })).toBe('/bookings/:reference');
+    expect(routeLabel({ originalUrl: '/elements/PE-000123' })).toBe('/elements/:barcode');
+  });
+
+  it('drops the query string', () => {
+    expect(routeLabel({ originalUrl: '/titles?limit=50&search=daisies' })).toBe('/titles');
+  });
+
+  it('leaves an ordinary path alone', () => {
+    expect(routeLabel({ originalUrl: '/health/ready' })).toBe('/health/ready');
+    expect(routeLabel({ originalUrl: '/' })).toBe('/');
+  });
+
+  it('does not fold something that only looks like an id', () => {
+    expect(routeLabel({ originalUrl: '/titles/the-red-shoes' })).toBe('/titles/the-red-shoes');
+  });
+});
