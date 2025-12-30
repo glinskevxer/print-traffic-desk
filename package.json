@@ -19,7 +19,8 @@
     "seed": "node src/cli/index.js seed",
     "lint:fix": "eslint --fix src tests scripts",
     "format": "prettier --write src tests scripts",
-    "format:check": "prettier --check src tests scripts"
+    "format:check": "prettier --check src tests scripts",
+    "start:cluster": "node src/http/cluster.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -47,5 +48,14 @@
   "license": "UNLICENSED",
   "bin": {
     "printdesk": "src/cli/index.js"
-  }
+  },
+  "keywords": [
+    "repertory",
+    "film-archive",
+    "print-traffic",
+    "rights-clearance",
+    "royalties",
+    "express",
+    "mongodb"
+  ]
 }
