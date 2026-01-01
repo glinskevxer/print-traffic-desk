@@ -189,3 +189,76 @@ describe('recording an inspection', () => {
     expect(due.map((e) => e.publicId)).toEqual([overdue.publicId]);
   });
 });
+
+describe('the inspection queue', () => {
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+  });
+
+  it('finds a print nobody has ever looked at', async () => {
+    const never = await makePrintElement({ lastInspectedOn: null, screeningsSinceInspection: 0 });
+
+    const due = await service.dueForInspection();
+
+    expect(due.map((each) => each.publicId)).toEqual([never.publicId]);
+  });
+
+  it('finds the overdue print behind a shelf full of healthy ones', async () => {
+    for (let i = 0; i < 12; i += 1) {
+      await makePrintElement({ screeningsSinceInspection: 0, inspectionIntervalScreenings: 6 });
+    }
+    const overdue = await makePrintElement({
+      screeningsSinceInspection: 40,
+      inspectionIntervalScreenings: 6,
+    });
+
+    const due = await service.dueForInspection({ limit: 2 });
+
+    expect(due.map((each) => each.publicId)).toEqual([overdue.publicId]);
+  });
+
+  it('orders the queue by how worn the print is', async () => {
+    const worst = await makePrintElement({ screeningsSinceInspection: 30 });
+    const middling = await makePrintElement({ screeningsSinceInspection: 12 });
+    await makePrintElement({ screeningsSinceInspection: 1 });
+
+    const due = await service.dueForInspection();
+
+    expect(due.map((each) => each.publicId)).toEqual([worst.publicId, middling.publicId]);
+  });
+
+  it('leaves out the prints that are not on the shelf to be looked at', async () => {
+    await makePrintElement({ status: 'retired', screeningsSinceInspection: 40 });
+    await makePrintElement({ status: 'quarantined', lastInspectedOn: null });
+
+    expect(await service.dueForInspection()).toEqual([]);
+  });
+
+  it('holds the page size it was asked for', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      await makePrintElement({ screeningsSinceInspection: 20 });
+    }
+
+    expect(await service.dueForInspection({ limit: 3 })).toHaveLength(3);
+  });
+
+  it('asks the database the same question the document answers', async () => {
+    const element = await makePrintElement({
+      screeningsSinceInspection: 6,
+      inspectionIntervalScreenings: 6,
+    });
+
+    expect(element.needsInspection()).toBe(true);
+    expect((await service.dueForInspection()).map((each) => each.publicId)).toContain(
+      element.publicId,
+    );
+  });
+});

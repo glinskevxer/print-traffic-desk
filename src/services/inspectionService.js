@@ -169,16 +169,21 @@ async function latestFor(elementPublicId) {
   return InspectionReport.findOne({ element: element._id }).sort({ inspectedAt: -1 });
 }
 
-/** Elements the desk should be pulling in for a look, worst first. */
+/**
+ * Elements the desk should be pulling in for a look, worst first.
+ *
+ * This used to read four times the page and filter in javascript, which was
+ * wrong as soon as the shelf had more than four pages of healthy prints: the
+ * overdue ones sorted last and never made the window.
+ */
 async function dueForInspection({ limit = 50 } = {}) {
   const { PrintElement } = models();
-  const candidates = await PrintElement.find({
-    status: { $in: ['available', 'committed'] },
+
+  return PrintElement.find({
+    $and: [{ status: { $in: ['available', 'committed'] } }, PrintElement.dueForInspectionFilter()],
   })
     .sort({ screeningsSinceInspection: -1 })
-    .limit(limit * 4);
-
-  return candidates.filter((element) => element.needsInspection()).slice(0, limit);
+    .limit(limit);
 }
 
 module.exports = {

@@ -71,7 +71,7 @@ async function listElements(query = {}) {
   if (query.baseStock) filter.baseStock = query.baseStock;
   if (query.grade) filter.conditionGrade = query.grade;
   if (query.needsInspection) {
-    filter.$expr = { $gte: ['$screeningsSinceInspection', '$inspectionIntervalScreenings'] };
+    Object.assign(filter, PrintElement.dueForInspectionFilter());
   }
 
   return paginate(PrintElement, {

@@ -81,6 +81,9 @@ printElementSchema.index({ barcode: 1 }, { unique: true });
 printElementSchema.index({ title: 1, status: 1 });
 printElementSchema.index({ currentLocation: 1, status: 1 });
 printElementSchema.index({ owner: 1 });
+// The inspection queue reads status and orders by wear, so both belong in one
+// index; without it the queue was a collection scan on every scrape.
+printElementSchema.index({ status: 1, screeningsSinceInspection: -1 });
 
 printElementSchema.virtual('runningMinutesAt24').get(function runningMinutes() {
   if (this.gauge === '16mm' || this.gauge === 'super16') return this.footage / 36;
@@ -91,6 +94,20 @@ printElementSchema.virtual('runningMinutesAt24').get(function runningMinutes() {
 printElementSchema.methods.needsInspection = function needsInspection() {
   if (!this.lastInspectedOn) return true;
   return this.screeningsSinceInspection >= this.inspectionIntervalScreenings;
+};
+
+/**
+ * The same question as needsInspection(), asked of the database. Written once
+ * here because the catalogue filter and the inspection queue had drifted: one
+ * of them counted screenings and forgot the prints nobody had ever looked at.
+ */
+printElementSchema.statics.dueForInspectionFilter = function dueForInspectionFilter() {
+  return {
+    $or: [
+      { lastInspectedOn: null },
+      { $expr: { $gte: ['$screeningsSinceInspection', '$inspectionIntervalScreenings'] } },
+    ],
+  };
 };
 
 printElementSchema.methods.isCirculating = function isCirculating() {
