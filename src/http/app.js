@@ -19,6 +19,7 @@ const { shipmentRoutes } = require('./routes/shipments');
 const { bookingRoutes } = require('./routes/bookings');
 const { royaltyRoutes } = require('./routes/royalties');
 const { extractionRoutes } = require('./routes/extraction');
+const { auditRoutes } = require('./routes/audit');
 const { logger } = require('../lib/logger');
 const { installDefaults } = require('../lib/metrics');
 const { version } = require('../../package.json');
@@ -80,6 +81,7 @@ function createApp({
   app.use('/bookings', bookingRoutes());
   app.use('/royalty-statements', royaltyRoutes());
   app.use('/extractions', extractionRoutes());
+  app.use('/audit-events', auditRoutes());
 
   app.use(notFoundHandler());
   app.use(errorHandler({ exposeInternal }));

@@ -2,6 +2,7 @@
 
 const { models } = require('../models');
 const { currentContext } = require('./context');
+const { paginate } = require('./pagination');
 
 /**
  * A change list, not a document copy. Storing whole before and after documents
@@ -78,4 +79,46 @@ async function trailFor(subjectType, subjectId, { limit = 50 } = {}) {
   return AuditEvent.find({ subjectType, subjectId }).sort({ at: -1 }).limit(limit);
 }
 
-module.exports = { diffFields, normalise, record, recordChange, trailFor };
+/**
+ * The trail as a page. Distributors ask for a year of it at a time and the
+ * answer to "who released that quarantine" is somewhere in the middle, so it
+ * pages by keyset like everything else rather than by an offset that moves
+ * while it is being read.
+ */
+async function searchTrail(query = {}) {
+  const { AuditEvent } = models();
+  const filter = {};
+
+  if (query.subjectType) filter.subjectType = query.subjectType;
+  if (query.subjectId) filter.subjectId = query.subjectId;
+  if (query.actor) filter.actor = query.actor;
+  if (query.action) filter.action = query.action;
+  if (query.source) filter.source = query.source;
+  if (query.from || query.to) {
+    filter.at = {};
+    if (query.from) filter.at.$gte = new Date(query.from);
+    if (query.to) filter.at.$lte = new Date(query.to);
+  }
+
+  return paginate(AuditEvent, {
+    filter,
+    sortField: 'at',
+    order: query.order || 'desc',
+    limit: query.limit,
+    cursor: query.cursor,
+  });
+}
+
+/** Who has touched a record, and how often, for a distributor's question. */
+async function actorsFor(subjectType, subjectId) {
+  const { AuditEvent } = models();
+  const rows = await AuditEvent.aggregate([
+    { $match: { subjectType, subjectId } },
+    { $group: { _id: '$actor', changes: { $sum: 1 }, last: { $max: '$at' } } },
+    { $sort: { changes: -1, _id: 1 } },
+  ]);
+
+  return rows.map((row) => ({ actor: row._id, changes: row.changes, last: row.last }));
+}
+
+module.exports = { diffFields, normalise, record, recordChange, trailFor, searchTrail, actorsFor };
