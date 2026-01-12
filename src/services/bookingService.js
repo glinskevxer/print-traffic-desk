@@ -10,6 +10,7 @@ const { bookingReference } = require('../lib/ids');
 const { instantOf, localDateOf, addDays } = require('../lib/dates');
 const { assertTransition } = require('../domain/elements/status');
 const { rankCandidates } = require('../domain/elements/selection');
+const { boothCompatibility } = require('../domain/elements/compatibility');
 const { planRoundTrip } = require('../domain/traffic/routing');
 const { spansFromShipments, isFreeBetween } = require('../domain/traffic/availability');
 const { computeRoyalty } = require('../domain/royalties/compute');
@@ -90,7 +91,7 @@ async function candidateElements({ title, venue, span, session }) {
  * the licence, then a print, then the calendar.
  */
 async function requestBooking(input) {
-  const { Booking, Title, Venue, PrintElement, RightsWindow } = models();
+  const { Title, Venue, PrintElement } = models();
   const holdMinutes = input.holdMinutes || DEFAULT_HOLD_MINUTES;
 
   return withTransaction(async (session) => {
@@ -107,7 +108,6 @@ async function requestBooking(input) {
       throw new RuleRefusedError('this house is not taking bookings', { venue: input.venueId });
     }
 
-    const screeningAt = instantOf(input.localDate, input.localTime, venue.timezone);
     const takenHere = await screeningsTakenAt(title._id, venue._id, session);
 
     const decision = await rightsService.clearScreeningRequest({
@@ -127,6 +127,32 @@ async function requestBooking(input) {
 
     const today = input.today || localDateOf(new Date(), venue.timezone);
     const span = { startsOn: today, endsOn: addDays(input.localDate, 21) };
+
+    // A later night of a run reuses the print the first night committed. Every
+    // other path searches the shelf, because a print already committed is not
+    // available and must not be handed to a second booking.
+    if (input.reuseElementId) {
+      const reused = await required(PrintElement, input.reuseElementId, { session });
+      const { compatible, problems } = boothCompatibility(reused, venue);
+      if (!compatible) {
+        throw new RuleRefusedError('that print cannot take this booking', {
+          element: input.reuseElementId,
+          problems,
+        });
+      }
+      return holdBooking({
+        session,
+        title,
+        venue,
+        element: reused,
+        decision,
+        input,
+        today,
+        holdMinutes,
+        commitElement: false,
+      });
+    }
+
     const { runnable, rejected, unavailable } = await candidateElements({
       title,
       venue,
@@ -160,96 +186,128 @@ async function requestBooking(input) {
       });
     }
 
-    const element = chosen.element;
-    const origin = await Venue.findById(element.currentLocation, null, { session });
-    const plan = planRoundTrip({
-      fromTerritory: origin.territory,
-      toTerritory: venue.territory,
-      outboundLeadDays: origin.outboundLeadDays,
-      inboundLeadDays: venue.inboundLeadDays,
-      inspectionDays: element.needsInspection() ? 3 : 0,
-      screeningLocalDate: input.localDate,
-      holdDaysAfterScreening: input.holdDaysAfterScreening || 1,
+    return holdBooking({
+      session,
+      title,
+      venue,
+      element: chosen.element,
+      decision,
+      input,
       today,
-      restrictions: element.handlingRestrictions,
-      baseStock: element.baseStock,
+      holdMinutes,
+      commitElement: true,
     });
-    if (!plan.feasible) {
-      throw new RuleRefusedError(plan.outbound.detail, {
-        element: element.publicId,
-        reason: plan.outbound.reason,
-        shortfallDays: plan.outbound.shortfallDays,
-      });
-    }
+  });
+}
 
-    const window = await RightsWindow.byPublicId(decision.windowId, { session });
-    const [booking] = await Booking.create(
-      [
-        {
-          reference: bookingReference(screeningAt),
-          title: title._id,
-          venue: venue._id,
-          element: element._id,
-          rightsWindow: window._id,
-          screeningAt,
-          localDate: input.localDate,
-          localTime: input.localTime,
-          exhibitionType: input.exhibitionType,
-          status: 'held',
-          holdExpiresAt: new Date(Date.now() + holdMinutes * 60000),
-          clearance: {
-            windowId: window.publicId,
-            clearedAt: new Date(),
-            outcomes: decision.evaluations
-              .find((evaluation) => evaluation.windowId === window.publicId)
-              .outcomes.map(({ code, ok, detail }) => ({ code, ok, detail })),
-          },
-          traffic: {
-            committedFrom: plan.committedFrom,
-            committedUntil: plan.committedUntil,
-            service: plan.outbound.service,
-          },
-          idempotencyKey: input.idempotencyKey || null,
-          bookedBy: input.bookedBy,
-          notes: input.notes,
+/**
+ * Writes the booking, commits the print and counts the licence. Split out of
+ * requestBooking so the second night of a run takes exactly the same path
+ * without searching the shelf again.
+ */
+async function holdBooking({
+  session,
+  title,
+  venue,
+  element,
+  decision,
+  input,
+  today,
+  holdMinutes,
+  commitElement,
+}) {
+  const { Booking, Venue, PrintElement, RightsWindow } = models();
+  const screeningAt = instantOf(input.localDate, input.localTime, venue.timezone);
+  const origin = await Venue.findById(element.currentLocation, null, { session });
+
+  const plan = planRoundTrip({
+    fromTerritory: origin.territory,
+    toTerritory: venue.territory,
+    outboundLeadDays: origin.outboundLeadDays,
+    inboundLeadDays: venue.inboundLeadDays,
+    inspectionDays: element.needsInspection() ? 3 : 0,
+    screeningLocalDate: input.localDate,
+    holdDaysAfterScreening: input.holdDaysAfterScreening || 1,
+    today,
+    restrictions: element.handlingRestrictions,
+    baseStock: element.baseStock,
+  });
+  if (!plan.feasible) {
+    throw new RuleRefusedError(plan.outbound.detail, {
+      element: element.publicId,
+      reason: plan.outbound.reason,
+      shortfallDays: plan.outbound.shortfallDays,
+    });
+  }
+
+  const window = await required(RightsWindow, decision.windowId, { session });
+  const [booking] = await Booking.create(
+    [
+      {
+        reference: bookingReference(screeningAt),
+        title: title._id,
+        venue: venue._id,
+        element: element._id,
+        rightsWindow: window._id,
+        screeningAt,
+        localDate: input.localDate,
+        localTime: input.localTime,
+        exhibitionType: input.exhibitionType,
+        status: 'held',
+        holdExpiresAt: new Date(Date.now() + holdMinutes * 60000),
+        clearance: {
+          windowId: window.publicId,
+          clearedAt: new Date(),
+          outcomes: decision.evaluations
+            .find((evaluation) => evaluation.windowId === window.publicId)
+            .outcomes.map(({ code, ok, detail }) => ({ code, ok, detail })),
         },
-      ],
-      { session },
-    );
+        traffic: {
+          committedFrom: plan.committedFrom,
+          committedUntil: plan.committedUntil,
+          service: plan.outbound.service,
+        },
+        idempotencyKey: input.idempotencyKey || null,
+        bookedBy: input.bookedBy,
+        notes: input.notes,
+      },
+    ],
+    { session },
+  );
 
+  if (commitElement) {
     assertTransition(element.status, 'committed', { element: element.publicId });
-    await PrintElement.updateOne(
+    const result = await PrintElement.updateOne(
       { _id: element._id, revision: element.revision },
       { $set: { status: 'committed' }, $inc: { revision: 1 } },
       { session },
-    ).then((result) => {
-      if (result.matchedCount === 0) {
-        throw new ConflictError('that print was committed by somebody else, try again', {
-          element: element.publicId,
-        });
-      }
-    });
-
-    await RightsWindow.updateOne({ _id: window._id }, { $inc: { screeningsUsed: 1 } }, { session });
-
-    await audit.record(
-      {
-        action: 'booking.held',
-        subjectType: 'booking',
-        subjectId: booking.publicId,
-        metadata: {
-          reference: booking.reference,
-          title: title.slug,
-          venue: venue.code,
-          element: element.publicId,
-          window: window.publicId,
-        },
-      },
-      { session },
     );
+    if (result.matchedCount === 0) {
+      throw new ConflictError('that print was committed by somebody else, try again', {
+        element: element.publicId,
+      });
+    }
+  }
 
-    return { booking, element, plan, decision };
-  });
+  await RightsWindow.updateOne({ _id: window._id }, { $inc: { screeningsUsed: 1 } }, { session });
+
+  await audit.record(
+    {
+      action: 'booking.held',
+      subjectType: 'booking',
+      subjectId: booking.publicId,
+      metadata: {
+        reference: booking.reference,
+        title: title.slug,
+        venue: venue.code,
+        element: element.publicId,
+        window: window.publicId,
+      },
+    },
+    { session },
+  );
+
+  return { booking, element, plan, decision };
 }
 
 async function getBooking(publicId) {
@@ -580,9 +638,61 @@ async function listBookings(query = {}) {
   });
 }
 
+/**
+ * A run is several nights of the same title at the same house. It is not one
+ * booking with a count: the box office, the royalty and the licence allowance
+ * are all per screening, and a run that half clears has to say which nights.
+ *
+ * The nights are taken one at a time and the first refusal stops the run,
+ * because a venue that asked for five nights and got two has a programme
+ * problem, not a booking.
+ */
+async function requestRun(input) {
+  const dates = [...new Set(input.localDates)].sort();
+  if (dates.length === 0) {
+    throw new RuleRefusedError('a run needs at least one date', {});
+  }
+  if (dates.length > 14) {
+    throw new RuleRefusedError('a run of more than a fortnight is booked night by night', {
+      nights: dates.length,
+    });
+  }
+
+  const taken = [];
+  try {
+    for (const localDate of dates) {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await requestBooking({
+        ...input,
+        localDate,
+        // Every night after the first has to use the print the first one took,
+        // or the run arrives as several prints and the house gets three cans.
+        elementId: taken.length === 0 ? input.elementId : undefined,
+        reuseElementId: taken.length === 0 ? undefined : taken[0].element.publicId,
+      });
+      taken.push(result);
+    }
+  } catch (err) {
+    for (const result of taken.reverse()) {
+      // eslint-disable-next-line no-await-in-loop
+      await cancelBooking(result.booking.publicId, {
+        reason: `the rest of the run could not be held: ${err.message}`,
+      });
+    }
+    throw err;
+  }
+
+  return {
+    bookings: taken.map((result) => result.booking),
+    element: taken[0].element,
+    nights: dates.length,
+  };
+}
+
 module.exports = {
   DEFAULT_HOLD_MINUTES,
   requestBooking,
+  requestRun,
   confirmBooking,
   cancelBooking,
   lapseExpiredHolds,

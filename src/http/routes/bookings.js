@@ -33,6 +33,10 @@ const requestBody = z.object({
   notes: z.string().max(2000).optional(),
 });
 
+const runBody = requestBody
+  .omit({ localDate: true })
+  .extend({ localDates: z.array(isoDate).min(1).max(14) });
+
 const boxOfficeBody = z.object({
   grossMinor: minorAmount,
   currency,
@@ -80,6 +84,21 @@ function bookingRoutes() {
           outbound: plan.outbound.dates,
           back: plan.inbound.dates,
         },
+      });
+    }),
+  );
+
+  router.post(
+    '/runs',
+    requireRole('programmer'),
+    idempotency(),
+    validate({ body: runBody }),
+    asyncHandler(async (req, res) => {
+      const { bookings, element, nights } = await service.requestRun(req.valid.body);
+      res.status(201).json({
+        nights,
+        element: { id: element.publicId, barcode: element.barcode },
+        bookings: bookings.map(bookingView),
       });
     }),
   );

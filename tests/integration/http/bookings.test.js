@@ -171,3 +171,133 @@ describe('booking endpoints', () => {
     await request(app).get('/bookings/bkg_0000000000000000').expect(404);
   });
 });
+
+describe('booking a run of nights', () => {
+  let app;
+  let holder;
+  let title;
+  let venue;
+  let vault;
+  let element;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE', seats: 288 });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    element = await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  const run = (overrides = {}) => ({
+    titleId: title.publicId,
+    venueId: venue.publicId,
+    localDates: ['2025-06-20', '2025-06-21', '2025-06-22'],
+    localTime: '19:30',
+    exhibitionType: 'repertory',
+    today: '2025-05-15',
+    ...overrides,
+  });
+
+  it('holds every night on the same print', async () => {
+    const res = await request(app).post('/bookings/runs').send(run()).expect(201);
+
+    expect(res.body.nights).toBe(3);
+    expect(res.body.bookings).toHaveLength(3);
+    expect(res.body.element.barcode).toBe(element.barcode);
+    expect(new Set(res.body.bookings.map((booking) => booking.element)).size).toBe(1);
+  });
+
+  it('counts every night against the licence', async () => {
+    await request(app).post('/bookings/runs').send(run()).expect(201);
+
+    const window = await models().RightsWindow.findOne({ title: title._id });
+    expect(window.screeningsUsed).toBe(3);
+  });
+
+  it('sorts the nights and ignores a date given twice', async () => {
+    const res = await request(app)
+      .post('/bookings/runs')
+      .send(run({ localDates: ['2025-06-22', '2025-06-20', '2025-06-20'] }))
+      .expect(201);
+
+    expect(res.body.bookings.map((booking) => booking.localDate)).toEqual([
+      '2025-06-20',
+      '2025-06-22',
+    ]);
+  });
+
+  it('holds nothing at all when one night cannot be held', async () => {
+    const { RightsWindow } = models();
+    await RightsWindow.updateMany({}, { $set: { maxScreenings: 2 } });
+
+    const res = await request(app).post('/bookings/runs').send(run()).expect(422);
+    expect(res.body.error.details.refusalCodes).toEqual(['screening-cap']);
+
+    const live = await models().Booking.countDocuments({ status: { $in: ['held', 'confirmed'] } });
+    expect(live).toBe(0);
+  });
+
+  it('gives the print back when a run is stood down', async () => {
+    const { RightsWindow } = models();
+    await RightsWindow.updateMany({}, { $set: { maxScreenings: 2 } });
+
+    await request(app).post('/bookings/runs').send(run()).expect(422);
+
+    expect((await models().PrintElement.findById(element._id)).status).toBe('available');
+    expect((await RightsWindow.findOne({ title: title._id })).screeningsUsed).toBe(0);
+  });
+
+  it('refuses a run with no nights in it', async () => {
+    await request(app)
+      .post('/bookings/runs')
+      .send(run({ localDates: [] }))
+      .expect(400);
+  });
+
+  it('refuses a run longer than a fortnight', async () => {
+    const fifteen = Array.from(
+      { length: 15 },
+      (_, day) => `2025-06-${String(day + 10).padStart(2, '0')}`,
+    );
+
+    await request(app)
+      .post('/bookings/runs')
+      .send(run({ localDates: fifteen }))
+      .expect(400);
+  });
+
+  it('takes the print the house asked for across the whole run', async () => {
+    const other = await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+      conditionGrade: 'C',
+    });
+
+    const res = await request(app)
+      .post('/bookings/runs')
+      .send(run({ elementId: other.publicId }))
+      .expect(201);
+
+    expect(res.body.element.barcode).toBe(other.barcode);
+  });
+});
