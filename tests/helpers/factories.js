@@ -2,21 +2,36 @@
 
 const { models } = require('../../src/models');
 
-let counter = 0;
+/**
+ * One counter for the whole worker, not per test file. Jest resets the module
+ * registry between files but keeps the process, and the suites in one worker
+ * share a database, so a per file counter handed out the same barcode twice
+ * and the run failed on a duplicate key roughly one time in fifteen.
+ */
+const COUNTER_KEY = 'printdesk-factory-counter';
+
+function nextNumber() {
+  globalThis[COUNTER_KEY] = (globalThis[COUNTER_KEY] || 0) + 1;
+  return globalThis[COUNTER_KEY];
+}
 
 function nextBarcode() {
-  counter += 1;
-  return `PE-${String(counter).padStart(6, '0')}`;
+  return `PE-${String(nextNumber()).padStart(6, '0')}`;
 }
 
 function resetFactoryCounter() {
-  counter = 0;
+  globalThis[COUNTER_KEY] = 0;
+}
+
+/** Four characters of a venue code, unique inside the run rather than random. */
+function nextSuffix() {
+  return String(nextNumber()).padStart(4, '0').slice(-4);
 }
 
 async function makeRightsHolder(overrides = {}) {
   const { RightsHolder } = models();
   return RightsHolder.create({
-    name: `Holder ${Math.random().toString(36).slice(2, 8)}`,
+    name: `Holder ${nextNumber()}`,
     kind: 'distributor',
     remittanceCurrency: 'GBP',
     territoriesRepresented: ['GB', 'IE'],
@@ -28,7 +43,7 @@ async function makeRightsHolder(overrides = {}) {
 async function makeTitle(overrides = {}) {
   const { Title } = models();
   const rightsHolder = overrides.rightsHolder || (await makeRightsHolder())._id;
-  const slug = overrides.slug || `title-${Math.random().toString(36).slice(2, 8)}`;
+  const slug = overrides.slug || `title-${nextNumber()}`;
   return Title.create({
     slug,
     title: 'The Red Shoes',
@@ -45,7 +60,7 @@ async function makeTitle(overrides = {}) {
 
 async function makeVenue(overrides = {}) {
   const { Venue } = models();
-  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const suffix = nextSuffix();
   return Venue.create({
     code: `GB-LON-${suffix}`,
     name: 'Prince Charles Cinema',
@@ -114,6 +129,7 @@ async function makeRightsWindow(overrides = {}) {
 
 module.exports = {
   nextBarcode,
+  nextNumber,
   resetFactoryCounter,
   makeRightsHolder,
   makeTitle,

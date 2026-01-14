@@ -2,7 +2,7 @@
 
 const shipments = require('../../services/shipmentService');
 const inspections = require('../../services/inspectionService');
-const { localDateOf } = require('../../lib/dates');
+const { localDateOf, assertIsoDate } = require('../../lib/dates');
 
 /**
  * The morning list. Two questions the traffic desk asks every day: what should
@@ -16,7 +16,9 @@ module.exports = {
     limit: { type: 'number', default: 25, describe: 'how many prints to list' },
   },
   async run({ options, out }) {
-    const today = options.asOf || localDateOf(new Date(), 'Europe/London');
+    const today = options.asOf
+      ? assertIsoDate(options.asOf, 'asOf')
+      : localDateOf(new Date(), 'Europe/London');
 
     const late = await shipments.overdueArrivals(today);
     out(`legs that should have landed by ${today}: ${late.length}`);

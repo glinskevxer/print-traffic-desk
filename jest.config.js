@@ -15,6 +15,16 @@ module.exports = {
   maxWorkers: 3,
   collectCoverageFrom: ['src/**/*.js'],
   coverageDirectory: 'coverage',
+  // Floors, not targets. They sit a little under where the suite is now, so a
+  // change that drops coverage noticeably fails and one that drops it by a
+  // line does not turn into a chore for whoever is holding the pull request.
+  coverageThreshold: {
+    global: { statements: 92, branches: 82, functions: 92, lines: 93 },
+    // The rules are the part worth insisting on: they have no database, no
+    // clock and no excuse for an untested path.
+    './src/domain/': { statements: 96, branches: 88, functions: 96, lines: 96 },
+    './src/lib/': { statements: 95, branches: 86, functions: 95, lines: 96 },
+  },
   projects: [
     {
       ...shared,

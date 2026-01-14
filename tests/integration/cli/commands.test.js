@@ -9,7 +9,13 @@ const {
 const { models } = require('../../../src/models');
 const { resetConfigForTests } = require('../../../src/config/env');
 const { run, usage, BY_NAME } = require('../../../src/cli/index');
-const { makeTitle, makeRightsHolder, makeRightsWindow } = require('../../helpers/factories');
+const {
+  makeTitle,
+  makeRightsHolder,
+  makeRightsWindow,
+  makeVenue,
+  makePrintElement,
+} = require('../../helpers/factories');
 
 function collector() {
   const lines = [];
@@ -144,5 +150,137 @@ describe('the command line', () => {
       await run(['statements', '--from', '2025-06-01', '--to', '2025-06-30'], { out, err }),
     ).toBe(0);
     expect(lines.join('\n')).toContain('built 0 statements');
+  });
+});
+
+describe('the commands that report and change things', () => {
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await useDatabase();
+    await clearCollections();
+    process.env.MONGO_URI = testDatabaseUri();
+    resetConfigForTests();
+  });
+
+  it('runs the migrations and then says there is nothing to run', async () => {
+    const first = collector();
+    expect(await run(['migrate'], first)).toBe(0);
+    expect(first.lines.join('\n')).toMatch(/ran \d+ migrations/);
+
+    const second = collector();
+    expect(await run(['migrate'], second)).toBe(0);
+    expect(second.lines.join('\n')).toContain('nothing to run');
+  });
+
+  it('lists what has run and what has not', async () => {
+    const before = collector();
+    await run(['migrate', '--status'], before);
+    expect(before.lines.join('\n')).toContain('pending  001-backfill-element-inspection-interval');
+
+    await run(['migrate'], collector());
+
+    const after = collector();
+    await run(['migrate', '--status'], after);
+    expect(after.lines.join('\n')).toContain('applied  001-backfill-element-inspection-interval');
+  });
+
+  it('changes nothing on a dry run', async () => {
+    const { lines, out, err } = collector();
+
+    expect(await run(['migrate', '--dryRun'], { out, err })).toBe(0);
+    expect(lines.join('\n')).toContain('would run');
+
+    const status = collector();
+    await run(['migrate', '--status'], status);
+    expect(status.lines.join('\n')).not.toContain('applied');
+  });
+
+  it('says which holds would lapse without lapsing them', async () => {
+    const { Booking } = models();
+    const title = await makeTitle();
+    const venue = await makeVenue();
+    await Booking.create({
+      reference: 'BK-2025-171-0001',
+      title: title._id,
+      venue: venue._id,
+      screeningAt: new Date('2025-06-20T18:30:00Z'),
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      status: 'held',
+      holdExpiresAt: new Date(Date.now() - 1000),
+    });
+
+    const dry = collector();
+    expect(await run(['lapse-holds', '--dryRun'], dry)).toBe(0);
+    expect(dry.lines.join('\n')).toContain('1 holds would lapse');
+    expect(dry.lines.join('\n')).toContain('BK-2025-171-0001');
+
+    await useDatabase();
+    expect((await models().Booking.findOne({})).status).toBe('held');
+  });
+
+  it('chases a leg that should have landed', async () => {
+    const home = await makeVenue({ code: 'GB-BER-VAULT' });
+    const away = await makeVenue({ code: 'GB-GLA-GFT', city: 'Glasgow' });
+    const element = await makePrintElement({ currentLocation: home._id, custodian: home._id });
+    await models().Shipment.create({
+      element: element._id,
+      fromVenue: home._id,
+      toVenue: away._id,
+      leg: 'outbound',
+      service: 'road-freight',
+      plannedDispatchOn: '2025-06-10',
+      plannedArrivalOn: '2025-06-12',
+      status: 'in-transit',
+      trackingReference: 'FF-9911',
+    });
+
+    const { lines, out, err } = collector();
+    expect(await run(['chase', '--asOf', '2025-06-20'], { out, err })).toBe(0);
+    expect(lines.join('\n')).toContain('legs that should have landed by 2025-06-20: 1');
+    expect(lines.join('\n')).toContain('FF-9911');
+  });
+
+  it('lists the prints that are due a look', async () => {
+    await makePrintElement({ screeningsSinceInspection: 20, inspectionIntervalScreenings: 6 });
+
+    const { lines, out, err } = collector();
+    await run(['chase', '--asOf', '2025-06-20', '--limit', '5'], { out, err });
+
+    expect(lines.join('\n')).toContain('prints due an inspection: 1');
+    expect(lines.join('\n')).toContain('20 screenings since a look');
+  });
+
+  it('skips a licensor whose period already has a statement', async () => {
+    const holder = await makeRightsHolder({ name: 'Park Circus' });
+    await models().RoyaltyStatement.create({
+      rightsHolder: holder._id,
+      periodStartsOn: '2025-06-01',
+      periodEndsOn: '2025-06-30',
+      currency: 'GBP',
+      totalMinor: 0,
+    });
+
+    const { lines, out, err } = collector();
+    await run(['statements', '--from', '2025-06-01', '--to', '2025-06-30'], { out, err });
+
+    expect(lines.join('\n')).toContain('skipped, a statement for that period already exists');
+  });
+
+  it('answers a command that raises a desk error with a message and a code', async () => {
+    const { lines, out, err } = collector();
+
+    const code = await run(['expire-windows', '--asOf', 'not-a-date'], { out, err });
+
+    expect(code).toBe(1);
+    expect(lines.join('\n')).toContain('printdesk expire-windows:');
   });
 });
