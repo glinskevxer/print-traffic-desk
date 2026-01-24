@@ -5,7 +5,14 @@ const { z } = require('zod');
 const { asyncHandler } = require('../asyncHandler');
 const { validate } = require('../middleware/validate');
 const { requireRole } = require('../middleware/auth');
-const { publicId, listQuery, territory, currency, venueCode } = require('../schemas/common');
+const {
+  publicId,
+  listQuery,
+  territory,
+  currency,
+  venueCode,
+  isoDate,
+} = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const { GAUGES, SOUND_FORMATS, PROJECTION_SPEEDS } = require('../../domain/formats');
 const venueService = require('../../services/venueService');
@@ -106,6 +113,24 @@ function venueRoutes() {
     validate({ params: venueParams }),
     asyncHandler(async (req, res) => {
       res.json((await venueService.getVenue(req.valid.params.venueId)).toJSON());
+    }),
+  );
+
+  router.get(
+    '/:venueId/diary',
+    validate({
+      params: venueParams,
+      query: z.object({ from: isoDate, to: isoDate }).refine((range) => range.from <= range.to, {
+        message: 'the diary ends before it starts',
+        path: ['to'],
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const { venue, nights } = await venueService.diaryFor(
+        req.valid.params.venueId,
+        req.valid.query,
+      );
+      res.json({ venue: { id: venue.publicId, code: venue.code, name: venue.name }, nights });
     }),
   );
 

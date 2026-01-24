@@ -4,7 +4,14 @@ const request = require('supertest');
 const { buildTestApp } = require('../../helpers/app');
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { models } = require('../../../src/models');
-const { makeVenue, makePrintElement, makeTitle } = require('../../helpers/factories');
+const {
+  makeVenue,
+  makePrintElement,
+  makeTitle,
+  makeRightsHolder,
+  makeRightsWindow,
+} = require('../../helpers/factories');
+const bookings = require('../../../src/services/bookingService');
 
 describe('venue endpoints', () => {
   let app;
@@ -163,5 +170,119 @@ describe('venue endpoints', () => {
       .expect(200);
 
     expect(res.body.active).toBe(false);
+  });
+});
+
+describe('what a house has on', () => {
+  let app;
+  let holder;
+  let title;
+  let venue;
+  let vault;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable', slug: 'daisies' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+      conditionGrade: 'B',
+    });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  async function book(localDate) {
+    const { booking } = await bookings.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate,
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+    return booking;
+  }
+
+  it('is empty for a quiet fortnight', async () => {
+    const res = await request(app)
+      .get(`/venues/${venue.publicId}/diary?from=2025-06-01&to=2025-06-14`)
+      .expect(200);
+
+    expect(res.body.nights).toEqual([]);
+    expect(res.body.venue.code).toBe('GB-LON-PRINCE');
+  });
+
+  it('lists the night with the title and the print on it', async () => {
+    const booking = await book('2025-06-20');
+
+    const res = await request(app)
+      .get(`/venues/${venue.publicId}/diary?from=2025-06-01&to=2025-06-30`)
+      .expect(200);
+
+    expect(res.body.nights).toHaveLength(1);
+    expect(res.body.nights[0].reference).toBe(booking.reference);
+    expect(res.body.nights[0].title.slug).toBe('daisies');
+    expect(res.body.nights[0].print.grade).toBe('B');
+    expect(res.body.nights[0].print.status).toBe('committed');
+  });
+
+  it('says whether the leg carrying the print has left', async () => {
+    const booking = await book('2025-06-20');
+    await bookings.confirmBooking(booking.publicId);
+
+    const res = await request(app)
+      .get(`/venues/${venue.publicId}/diary?from=2025-06-01&to=2025-06-30`)
+      .expect(200);
+
+    expect(res.body.nights[0].arrival.status).toBe('planned');
+    expect(res.body.nights[0].arrival.expected).toBe('2025-06-20');
+  });
+
+  it('leaves a cancelled night out', async () => {
+    const booking = await book('2025-06-20');
+    await bookings.cancelBooking(booking.publicId, { reason: 'programme changed' });
+
+    const res = await request(app)
+      .get(`/venues/${venue.publicId}/diary?from=2025-06-01&to=2025-06-30`)
+      .expect(200);
+
+    expect(res.body.nights).toEqual([]);
+  });
+
+  it('leaves out a night outside the range asked for', async () => {
+    await book('2025-06-20');
+
+    const res = await request(app)
+      .get(`/venues/${venue.publicId}/diary?from=2025-07-01&to=2025-07-31`)
+      .expect(200);
+
+    expect(res.body.nights).toEqual([]);
+  });
+
+  it('refuses a range that ends before it starts', async () => {
+    const res = await request(app)
+      .get(`/venues/${venue.publicId}/diary?from=2025-07-01&to=2025-06-01`)
+      .expect(400);
+
+    expect(res.body.error.details.issues[0].key).toBe('to');
+  });
+
+  it('needs both ends of the range', async () => {
+    await request(app).get(`/venues/${venue.publicId}/diary?from=2025-07-01`).expect(400);
   });
 });

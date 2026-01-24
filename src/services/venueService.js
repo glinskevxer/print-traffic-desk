@@ -131,7 +131,69 @@ async function setVenueActive(publicId, active) {
   return venue;
 }
 
+/**
+ * What a house has on, night by night. The programmer wants one screen with
+ * the print, its condition and whether the leg that carries it has actually
+ * left, because the three questions arrive as one phone call.
+ */
+async function diaryFor(publicId, { from, to }) {
+  const { Booking, Title, PrintElement, Shipment } = models();
+  const venue = await getVenue(publicId);
+
+  const bookings = await Booking.find({
+    venue: venue._id,
+    localDate: { $gte: from, $lte: to },
+    status: { $ne: 'cancelled' },
+  }).sort({ screeningAt: 1 });
+
+  if (bookings.length === 0) return { venue, nights: [] };
+
+  const [titles, elements, legs] = await Promise.all([
+    Title.find({ _id: { $in: bookings.map((each) => each.title) } }, 'slug title year'),
+    PrintElement.find(
+      { _id: { $in: bookings.map((each) => each.element).filter(Boolean) } },
+      'barcode gauge soundFormat conditionGrade status handlingRestrictions',
+    ),
+    Shipment.find({ toVenue: venue._id, status: { $ne: 'cancelled' } }),
+  ]);
+
+  const titleById = new Map(titles.map((each) => [String(each._id), each]));
+  const elementById = new Map(elements.map((each) => [String(each._id), each]));
+  const legByElement = new Map(legs.map((each) => [String(each.element), each]));
+
+  const nights = bookings.map((booking) => {
+    const title = titleById.get(String(booking.title));
+    const element = booking.element ? elementById.get(String(booking.element)) : null;
+    const leg = element ? legByElement.get(String(element._id)) : null;
+
+    return {
+      booking: booking.publicId,
+      reference: booking.reference,
+      localDate: booking.localDate,
+      localTime: booking.localTime,
+      status: booking.status,
+      title: title ? { id: title.publicId, slug: title.slug, year: title.year } : null,
+      print: element
+        ? {
+            id: element.publicId,
+            barcode: element.barcode,
+            gauge: element.gauge,
+            grade: element.conditionGrade,
+            status: element.status,
+            restrictions: element.handlingRestrictions,
+          }
+        : null,
+      arrival: leg
+        ? { shipment: leg.publicId, status: leg.status, expected: leg.plannedArrivalOn }
+        : null,
+    };
+  });
+
+  return { venue, nights };
+}
+
 module.exports = {
+  diaryFor,
   createVenue,
   getVenue,
   getVenueByCode,
