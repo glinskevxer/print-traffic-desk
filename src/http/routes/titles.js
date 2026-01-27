@@ -8,6 +8,9 @@ const { requireRole } = require('../middleware/auth');
 const { publicId, listQuery } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const titleService = require('../../services/titleService');
+const availabilityService = require('../../services/availabilityService');
+const { isoDate, territory } = require('../schemas/common');
+const { EXHIBITION_TYPES } = require('../../models/rightsWindow');
 
 const creditSchema = z.object({
   name: z.string().min(1).max(120),
@@ -83,6 +86,27 @@ function titleRoutes() {
     asyncHandler(async (req, res) => {
       const title = await titleService.getTitle(req.valid.params.titleId);
       res.json(title.toJSON());
+    }),
+  );
+
+  router.get(
+    '/:titleId/availability',
+    validate({
+      params: z.object({ titleId: publicId('ttl') }),
+      query: z.object({
+        localDate: isoDate,
+        exhibitionType: z.enum(EXHIBITION_TYPES).default('repertory'),
+        territory: territory.optional(),
+        today: isoDate.optional(),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      res.json(
+        await availabilityService.housesFor({
+          titleId: req.valid.params.titleId,
+          ...req.valid.query,
+        }),
+      );
     }),
   );
 
