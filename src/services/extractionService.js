@@ -2,7 +2,7 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
-const { paginate } = require('../lib/pagination');
+const { listWith } = require('../db/listing');
 const { RuleRefusedError, ConflictError, DeskError, CODES } = require('../lib/errors');
 const audit = require('../lib/audit');
 const { config } = require('../config/env');
@@ -326,12 +326,10 @@ async function listJobs(query = {}) {
   if (query.status) filter.status = query.status;
   if (query.needsHumanReview !== undefined) filter.needsHumanReview = query.needsHumanReview;
 
-  return paginate(ExtractionJob, {
+  return listWith(ExtractionJob, {
     filter,
+    query: { order: 'desc', ...query },
     sortField: 'createdAt',
-    order: query.order || 'desc',
-    limit: query.limit,
-    cursor: query.cursor,
   });
 }
 

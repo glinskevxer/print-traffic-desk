@@ -2,8 +2,8 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
-const { ConflictError, RuleRefusedError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
+const { listWith, guardDuplicates } = require('../db/listing');
+const { RuleRefusedError } = require('../lib/errors');
 const { exponentFor } = require('../lib/money');
 
 async function createRightsHolder(input) {
@@ -16,14 +16,10 @@ async function createRightsHolder(input) {
     });
   }
 
-  try {
-    return await RightsHolder.create(input);
-  } catch (err) {
-    if (err.code === 11000) {
-      throw new ConflictError(`${input.name} is already on file`, { name: input.name });
-    }
-    throw err;
-  }
+  return guardDuplicates(() => RightsHolder.create(input), {
+    message: `${input.name} is already on file`,
+    details: { name: input.name },
+  });
 }
 
 async function getRightsHolder(publicId) {
@@ -41,13 +37,7 @@ async function listRightsHolders(query = {}) {
     filter.territoriesRepresented = { $in: [query.territory, 'EU', 'WORLD'] };
   }
 
-  return paginate(RightsHolder, {
-    filter,
-    sortField: query.sortBy || 'name',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
+  return listWith(RightsHolder, { filter, query, sortField: 'name' });
 }
 
 const EDITABLE = ['legalName', 'territoriesRepresented', 'contacts', 'settlementDays', 'notes'];

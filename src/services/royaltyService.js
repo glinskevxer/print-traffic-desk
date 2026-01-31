@@ -2,9 +2,9 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
+const { listWith } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
 const { RuleRefusedError, ConflictError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
 const audit = require('../lib/audit');
 const { totalFor } = require('../domain/royalties/compute');
 const { addDays } = require('../lib/dates');
@@ -221,13 +221,7 @@ async function listStatements(query = {}) {
     filter.dueOn = { $lt: query.overdueAsOf };
   }
 
-  return paginate(RoyaltyStatement, {
-    filter,
-    sortField: query.sortBy || 'periodStartsOn',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
+  return listWith(RoyaltyStatement, { filter, query, sortField: 'periodStartsOn' });
 }
 
 module.exports = {

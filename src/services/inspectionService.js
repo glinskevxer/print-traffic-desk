@@ -2,9 +2,9 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
+const { listWith } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
 const { NotFoundError, RuleRefusedError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
 const { assessCondition } = require('../domain/condition/grade');
 const { withoutRestrictions } = require('../domain/handling');
 const { assertTransition, statusAfterVerdict, isTerminal } = require('../domain/elements/status');
@@ -154,12 +154,10 @@ async function listInspections(query = {}) {
   if (query.kind) filter.kind = query.kind;
   if (query.inspector) filter.inspector = query.inspector;
 
-  return paginate(InspectionReport, {
+  return listWith(InspectionReport, {
     filter,
+    query: { order: 'desc', ...query },
     sortField: 'inspectedAt',
-    order: query.order || 'desc',
-    limit: query.limit,
-    cursor: query.cursor,
   });
 }
 

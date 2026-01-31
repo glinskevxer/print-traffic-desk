@@ -2,9 +2,9 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
+const { listWith } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
 const { RuleRefusedError, ConflictError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
 const audit = require('../lib/audit');
 const { bookingReference } = require('../lib/ids');
 const { instantOf, localDateOf, addDays } = require('../lib/dates');
@@ -629,13 +629,7 @@ async function listBookings(query = {}) {
   if (query.from) filter.localDate = { ...(filter.localDate || {}), $gte: query.from };
   if (query.to) filter.localDate = { ...(filter.localDate || {}), $lte: query.to };
 
-  return paginate(Booking, {
-    filter,
-    sortField: query.sortBy || 'screeningAt',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
+  return listWith(Booking, { filter, query, sortField: 'screeningAt' });
 }
 
 /**

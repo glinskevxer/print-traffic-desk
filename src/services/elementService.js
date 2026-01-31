@@ -2,9 +2,9 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
+const { listWith, guardDuplicates } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
-const { NotFoundError, ConflictError, RuleRefusedError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
+const { NotFoundError, RuleRefusedError } = require('../lib/errors');
 const { assertTransition, isCommitted } = require('../domain/elements/status');
 const { boothCompatibility } = require('../domain/elements/compatibility');
 const audit = require('../lib/audit');
@@ -35,23 +35,21 @@ async function catalogueElement(input) {
     });
   }
 
-  try {
-    return await PrintElement.create({
-      ...input,
-      title: title._id,
-      owner: owner._id,
-      custodian: custodian._id,
-      currentLocation: custodian._id,
-      status: 'intake',
-    });
-  } catch (err) {
-    if (err.code === 11000) {
-      throw new ConflictError(`barcode ${input.barcode} is already catalogued`, {
-        barcode: input.barcode,
-      });
-    }
-    throw err;
-  }
+  return guardDuplicates(
+    () =>
+      PrintElement.create({
+        ...input,
+        title: title._id,
+        owner: owner._id,
+        custodian: custodian._id,
+        currentLocation: custodian._id,
+        status: 'intake',
+      }),
+    {
+      message: `barcode ${input.barcode} is already catalogued`,
+      details: { barcode: input.barcode },
+    },
+  );
 }
 
 async function listElements(query = {}) {
@@ -74,13 +72,7 @@ async function listElements(query = {}) {
     Object.assign(filter, PrintElement.dueForInspectionFilter());
   }
 
-  return paginate(PrintElement, {
-    filter,
-    sortField: query.sortBy || 'barcode',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
+  return listWith(PrintElement, { filter, query, sortField: 'barcode' });
 }
 
 /**

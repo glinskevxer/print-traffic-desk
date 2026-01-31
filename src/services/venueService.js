@@ -2,8 +2,8 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
-const { NotFoundError, ConflictError, RuleRefusedError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
+const { listWith, guardDuplicates } = require('../db/listing');
+const { NotFoundError, RuleRefusedError } = require('../lib/errors');
 const { assertZone } = require('../lib/dates');
 
 async function createVenue(input) {
@@ -17,15 +17,10 @@ async function createVenue(input) {
     });
   }
 
-  try {
-    return await Venue.create(input);
-  } catch (err) {
-    if (err.code === 11000)
-      throw new ConflictError(`venue ${input.code} is already on file`, {
-        code: input.code,
-      });
-    throw err;
-  }
+  return guardDuplicates(() => Venue.create(input), {
+    message: `venue ${input.code} is already on file`,
+    details: { code: input.code },
+  });
 }
 
 async function getVenue(publicId) {
@@ -52,13 +47,7 @@ async function listVenues(query = {}) {
   if (query.nitrateCertified !== undefined)
     filter['booth.nitrateCertified'] = query.nitrateCertified;
 
-  return paginate(Venue, {
-    filter,
-    sortField: query.sortBy || 'code',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
+  return listWith(Venue, { filter, query, sortField: 'code' });
 }
 
 const EDITABLE = [

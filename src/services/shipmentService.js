@@ -2,9 +2,9 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
+const { listWith } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
 const { RuleRefusedError, ConflictError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
 const audit = require('../lib/audit');
 const { assertTransition } = require('../domain/elements/status');
 const { planOutbound, planReturn } = require('../domain/traffic/routing');
@@ -275,13 +275,7 @@ async function listShipments(query = {}) {
   if (query.leg) filter.leg = query.leg;
   if (query.openOnly) filter.status = { $in: ['planned', 'collected', 'in-transit', 'delayed'] };
 
-  return paginate(Shipment, {
-    filter,
-    sortField: query.sortBy || 'plannedDispatchOn',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
+  return listWith(Shipment, { filter, query, sortField: 'plannedDispatchOn' });
 }
 
 /** Legs that should have landed by now, worst first, for the morning chase. */

@@ -2,9 +2,9 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
+const { listWith } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
 const { ConflictError, RuleRefusedError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
 const audit = require('../lib/audit');
 const { assertTerritory } = require('../domain/rights/territories');
 const { findExclusivityClashes, clashIsResolvable } = require('../domain/rights/exclusivity');
@@ -161,13 +161,7 @@ async function listWindows(query = {}) {
     filter.endsOn = { $gte: query.onDate };
   }
 
-  return paginate(RightsWindow, {
-    filter,
-    sortField: query.sortBy || 'startsOn',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
+  return listWith(RightsWindow, { filter, query, sortField: 'startsOn' });
 }
 
 /**

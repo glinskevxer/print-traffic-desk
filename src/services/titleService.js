@@ -2,8 +2,8 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
+const { listWith, guardDuplicates } = require('../db/listing');
 const { ConflictError, RuleRefusedError } = require('../lib/errors');
-const { paginate } = require('../lib/pagination');
 
 function slugify(text) {
   return String(text)
@@ -42,12 +42,10 @@ async function createTitle(input) {
 
   const slug = input.slug || (await uniqueSlug(slugify(`${input.title}-${input.year}`)));
 
-  try {
-    return await Title.create({ ...input, slug, rightsHolder: holder._id });
-  } catch (err) {
-    if (err.code === 11000) throw new ConflictError(`a title is already slugged ${slug}`, { slug });
-    throw err;
-  }
+  return guardDuplicates(() => Title.create({ ...input, slug, rightsHolder: holder._id }), {
+    message: `a title is already slugged ${slug}`,
+    details: { slug },
+  });
 }
 
 async function getTitle(publicId) {
@@ -73,13 +71,7 @@ async function listTitles(query = {}) {
     ];
   }
 
-  return paginate(Title, {
-    filter,
-    sortField: query.sortBy || 'slug',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
-  });
+  return listWith(Title, { filter, query, sortField: 'slug' });
 }
 
 const EDITABLE = [
