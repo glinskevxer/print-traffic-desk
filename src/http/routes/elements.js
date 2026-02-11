@@ -98,6 +98,33 @@ function elementRoutes() {
     }),
   );
 
+  router.get(
+    '/:elementId/provenance',
+    validate({
+      params: elementParams,
+      query: z.object({ limit: z.coerce.number().int().min(1).max(500).default(100) }),
+    }),
+    asyncHandler(async (req, res) => {
+      const record = await elementService.provenanceOf(req.valid.params.elementId, req.valid.query);
+      res.json({
+        element: {
+          id: record.element.publicId,
+          barcode: record.element.barcode,
+          grade: record.element.conditionGrade,
+          status: record.element.status,
+          home: record.home,
+          at: record.at,
+        },
+        totals: {
+          screenings: record.screenings,
+          inspections: record.inspections,
+          legs: record.legs,
+        },
+        events: record.events,
+      });
+    }),
+  );
+
   router.put(
     '/:elementId/location',
     requireRole('archivist'),

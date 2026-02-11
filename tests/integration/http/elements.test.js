@@ -8,7 +8,10 @@ const {
   makeVenue,
   makeRightsHolder,
   makePrintElement,
+  makeRightsWindow,
 } = require('../../helpers/factories');
+const bookings = require('../../../src/services/bookingService');
+const inspections = require('../../../src/services/inspectionService');
 
 describe('print element endpoints', () => {
   let app;
@@ -200,5 +203,144 @@ describe('print element endpoints', () => {
 
     expect(res.body.compatible).toBe(true);
     expect(res.body.playableSound).toBe('optical-mono');
+  });
+});
+
+describe('where a print has been', () => {
+  let app;
+  let holder;
+  let title;
+  let venue;
+  let vault;
+  let element;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    element = await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  it('is empty for a print that has never left the shelf', async () => {
+    const res = await request(app).get(`/elements/${element.publicId}/provenance`).expect(200);
+
+    expect(res.body.events).toEqual([]);
+    expect(res.body.totals).toEqual({ screenings: 0, inspections: 0, legs: 0 });
+    expect(res.body.element.home).toBe('GB-BER-VAULT');
+  });
+
+  it('lists an inspection with what it graded', async () => {
+    await inspections.recordInspection(element.publicId, {
+      inspector: 'R. Fitzgerald',
+      kind: 'routine',
+      inspectedAt: new Date('2025-03-04T10:00:00Z'),
+      findings: [{ reel: 1, code: 'PERF-TEAR', severity: 'severe' }],
+    });
+
+    const res = await request(app).get(`/elements/${element.publicId}/provenance`).expect(200);
+
+    expect(res.body.totals.inspections).toBe(1);
+    expect(res.body.events[0]).toMatchObject({
+      at: '2025-03-04',
+      kind: 'inspected',
+      status: 'projectable-with-restrictions',
+    });
+    expect(res.body.events[0].detail).toMatch(/graded C/);
+  });
+
+  it('lists a leg with where it went', async () => {
+    const { booking } = await bookings.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+    await bookings.confirmBooking(booking.publicId);
+
+    const res = await request(app).get(`/elements/${element.publicId}/provenance`).expect(200);
+
+    expect(res.body.totals.legs).toBe(2);
+    const travelled = res.body.events.find((event) => event.kind === 'travelled');
+    expect(travelled.detail).toMatch(/GB-BER-VAULT to GB-LON-PRINCE/);
+  });
+
+  it('lists a screening once it is confirmed', async () => {
+    const { booking } = await bookings.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+    await bookings.confirmBooking(booking.publicId);
+
+    const res = await request(app).get(`/elements/${element.publicId}/provenance`).expect(200);
+
+    const screened = res.body.events.find((event) => event.kind === 'screened');
+    expect(screened.reference).toBe(booking.reference);
+    expect(screened.detail).toBe('at GB-LON-PRINCE');
+  });
+
+  it('leaves a hold nobody confirmed out of the history', async () => {
+    await bookings.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+
+    const res = await request(app).get(`/elements/${element.publicId}/provenance`).expect(200);
+
+    expect(res.body.totals.screenings).toBe(0);
+  });
+
+  it('puts the events in the order they happened', async () => {
+    await inspections.recordInspection(element.publicId, {
+      inspector: 'R. Fitzgerald',
+      kind: 'intake',
+      inspectedAt: new Date('2025-01-04T10:00:00Z'),
+    });
+    const { booking } = await bookings.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+    await bookings.confirmBooking(booking.publicId);
+
+    const res = await request(app).get(`/elements/${element.publicId}/provenance`).expect(200);
+
+    const dates = res.body.events.map((event) => event.at);
+    expect(dates).toEqual([...dates].sort());
+    expect(res.body.events[0].kind).toBe('inspected');
+  });
+
+  it('answers 404 for a print that is not catalogued', async () => {
+    await request(app).get('/elements/elem_0000000000000000/provenance').expect(404);
   });
 });

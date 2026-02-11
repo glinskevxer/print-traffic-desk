@@ -150,7 +150,71 @@ async function setStatus(publicId, status, reason) {
   });
 }
 
+/**
+ * Where a print has been and what happened to it. An archive is asked this
+ * about a fifty year old element more often than it is asked anything else:
+ * before it lends one out, whoever is borrowing wants to know how many times
+ * it has run and who last looked at it.
+ */
+async function provenanceOf(publicId, { limit = 100 } = {}) {
+  const { Shipment, InspectionReport, Booking, Venue } = models();
+  const element = await getElement(publicId);
+
+  const [legs, inspections, screenings] = await Promise.all([
+    Shipment.find({ element: element._id }).sort({ plannedDispatchOn: 1 }).limit(limit),
+    InspectionReport.find({ element: element._id }).sort({ inspectedAt: 1 }).limit(limit),
+    Booking.find({ element: element._id, status: { $in: ['confirmed', 'settled'] } })
+      .sort({ screeningAt: 1 })
+      .limit(limit),
+  ]);
+
+  const venueIds = [
+    ...legs.map((leg) => leg.fromVenue),
+    ...legs.map((leg) => leg.toVenue),
+    ...screenings.map((booking) => booking.venue),
+    element.currentLocation,
+    element.custodian,
+  ];
+  const venues = await Venue.find({ _id: { $in: venueIds } }, 'code name');
+  const codeOf = new Map(venues.map((venue) => [String(venue._id), venue.code]));
+
+  const events = [
+    ...legs.map((leg) => ({
+      at: leg.arrivedOn || leg.plannedArrivalOn,
+      kind: 'travelled',
+      detail: `${leg.leg} leg ${codeOf.get(String(leg.fromVenue))} to ${codeOf.get(String(leg.toVenue))}`,
+      status: leg.status,
+      reference: leg.publicId,
+    })),
+    ...inspections.map((report) => ({
+      at: report.inspectedAt.toISOString().slice(0, 10),
+      kind: 'inspected',
+      detail: `${report.kind} by ${report.inspector}, graded ${report.assessment.grade}`,
+      status: report.assessment.verdict,
+      reference: report.publicId,
+    })),
+    ...screenings.map((booking) => ({
+      at: booking.localDate,
+      kind: 'screened',
+      detail: `at ${codeOf.get(String(booking.venue))}`,
+      status: booking.status,
+      reference: booking.reference,
+    })),
+  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+
+  return {
+    element,
+    home: codeOf.get(String(element.custodian)) || null,
+    at: codeOf.get(String(element.currentLocation)) || null,
+    screenings: screenings.length,
+    inspections: inspections.length,
+    legs: legs.length,
+    events,
+  };
+}
+
 module.exports = {
+  provenanceOf,
   getElement,
   getElementByBarcode,
   catalogueElement,
