@@ -46,6 +46,7 @@ async function start({ cfg = config(), log = logger() } = {}) {
     exposeInternal: !cfg.isProduction,
     allowedOrigins: cfg.http.allowedOrigins,
     limits: cfg.rateLimit,
+    timeoutMs: cfg.http.timeoutMs,
   });
 
   const server = app.listen(cfg.http.port);

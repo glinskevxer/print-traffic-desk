@@ -5,6 +5,7 @@ const { requestContext, requestLogging } = require('./middleware/requestContext'
 const { authenticate, requireOperator } = require('./middleware/auth');
 const { securityHeaders, crossOrigin, rejectMongoOperators } = require('./middleware/security');
 const { rateLimit } = require('./middleware/rateLimit');
+const { requestTimeout } = require('./middleware/timeout');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { healthRoutes } = require('./routes/health');
 const { authRoutes } = require('./routes/auth');
@@ -36,6 +37,7 @@ function createApp({
   authenticateWith = authenticate(),
   allowedOrigins = [],
   limits = null,
+  timeoutMs = null,
 } = {}) {
   const app = express();
   const startedAt = Date.now();
@@ -51,6 +53,7 @@ function createApp({
   installDefaults();
   app.use(requestLogging());
   app.use(crossOrigin(allowedOrigins));
+  if (timeoutMs) app.use(requestTimeout({ ms: timeoutMs }));
   app.use(express.json({ limit: bodyLimit }));
   app.use(rejectMongoOperators());
 
