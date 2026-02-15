@@ -4,7 +4,8 @@ const { models } = require('../models');
 const { required } = require('../db/lookup');
 const { listWith } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
-const { RuleRefusedError, ConflictError } = require('../lib/errors');
+const { RuleRefusedError } = require('../lib/errors');
+const { retryOnConflict, retryableConflict } = require('../lib/conflicts');
 const audit = require('../lib/audit');
 const { bookingReference } = require('../lib/ids');
 const { instantOf, localDateOf, addDays } = require('../lib/dates');
@@ -90,114 +91,121 @@ async function candidateElements({ title, venue, span, session }) {
  * this order because that is the order a venue can do something about them:
  * the licence, then a print, then the calendar.
  */
-async function requestBooking(input) {
+async function requestBooking(input, { attempts = 3, sleep } = {}) {
   const { Title, Venue, PrintElement } = models();
   const holdMinutes = input.holdMinutes || DEFAULT_HOLD_MINUTES;
 
-  return withTransaction(async (session) => {
-    const title = await required(Title, input.titleId, { session });
-    if (title.status !== 'bookable') {
-      throw new RuleRefusedError('this title is not bookable', {
-        title: input.titleId,
-        status: title.status,
-      });
-    }
+  // The whole decision is retried, not just the write. By the time a caller
+  // loses the conditional update the shelf has changed, and the second attempt
+  // has to choose a print against what is there now.
+  return retryOnConflict(
+    () =>
+      withTransaction(async (session) => {
+        const title = await required(Title, input.titleId, { session });
+        if (title.status !== 'bookable') {
+          throw new RuleRefusedError('this title is not bookable', {
+            title: input.titleId,
+            status: title.status,
+          });
+        }
 
-    const venue = await required(Venue, input.venueId, { session });
-    if (!venue.active) {
-      throw new RuleRefusedError('this house is not taking bookings', { venue: input.venueId });
-    }
+        const venue = await required(Venue, input.venueId, { session });
+        if (!venue.active) {
+          throw new RuleRefusedError('this house is not taking bookings', { venue: input.venueId });
+        }
 
-    const takenHere = await screeningsTakenAt(title._id, venue._id, session);
+        const takenHere = await screeningsTakenAt(title._id, venue._id, session);
 
-    const decision = await rightsService.clearScreeningRequest({
-      titleId: title.publicId,
-      venue,
-      localDate: input.localDate,
-      exhibitionType: input.exhibitionType,
-      screenings: 1,
-      screeningsAtVenue: takenHere,
-    });
-    if (!decision.cleared) {
-      throw new RuleRefusedError('no licence clears this screening', {
-        refusalCodes: decision.refusalCodes,
-        refusals: decision.details,
-      });
-    }
-
-    const today = input.today || localDateOf(new Date(), venue.timezone);
-    const span = { startsOn: today, endsOn: addDays(input.localDate, 21) };
-
-    // A later night of a run reuses the print the first night committed. Every
-    // other path searches the shelf, because a print already committed is not
-    // available and must not be handed to a second booking.
-    if (input.reuseElementId) {
-      const reused = await required(PrintElement, input.reuseElementId, { session });
-      const { compatible, problems } = boothCompatibility(reused, venue);
-      if (!compatible) {
-        throw new RuleRefusedError('that print cannot take this booking', {
-          element: input.reuseElementId,
-          problems,
+        const decision = await rightsService.clearScreeningRequest({
+          titleId: title.publicId,
+          venue,
+          localDate: input.localDate,
+          exhibitionType: input.exhibitionType,
+          screenings: 1,
+          screeningsAtVenue: takenHere,
         });
-      }
-      return holdBooking({
-        session,
-        title,
-        venue,
-        element: reused,
-        decision,
-        input,
-        today,
-        holdMinutes,
-        commitElement: false,
-      });
-    }
+        if (!decision.cleared) {
+          throw new RuleRefusedError('no licence clears this screening', {
+            refusalCodes: decision.refusalCodes,
+            refusals: decision.details,
+          });
+        }
 
-    const { runnable, rejected, unavailable } = await candidateElements({
-      title,
-      venue,
-      span,
-      session,
-    });
+        const today = input.today || localDateOf(new Date(), venue.timezone);
+        const span = { startsOn: today, endsOn: addDays(input.localDate, 21) };
 
-    let chosen;
-    if (input.elementId) {
-      const asked = runnable.find((each) => each.element.publicId === input.elementId);
-      if (!asked) {
-        throw new RuleRefusedError('that print cannot take this booking', {
-          element: input.elementId,
-          rejected: rejected.map((each) => ({
-            element: each.element.publicId,
-            problems: each.problems,
-          })),
+        // A later night of a run reuses the print the first night committed. Every
+        // other path searches the shelf, because a print already committed is not
+        // available and must not be handed to a second booking.
+        if (input.reuseElementId) {
+          const reused = await required(PrintElement, input.reuseElementId, { session });
+          const { compatible, problems } = boothCompatibility(reused, venue);
+          if (!compatible) {
+            throw new RuleRefusedError('that print cannot take this booking', {
+              element: input.reuseElementId,
+              problems,
+            });
+          }
+          return holdBooking({
+            session,
+            title,
+            venue,
+            element: reused,
+            decision,
+            input,
+            today,
+            holdMinutes,
+            commitElement: false,
+          });
+        }
+
+        const { runnable, rejected, unavailable } = await candidateElements({
+          title,
+          venue,
+          span,
+          session,
         });
-      }
-      chosen = asked;
-    } else {
-      [chosen] = runnable;
-    }
-    if (!chosen) {
-      throw new RuleRefusedError('no print of this title can play at this house', {
-        rejected: rejected.map((each) => ({
-          element: each.element.publicId,
-          problems: each.problems,
-        })),
-        unavailable: unavailable.map((each) => each.publicId),
-      });
-    }
 
-    return holdBooking({
-      session,
-      title,
-      venue,
-      element: chosen.element,
-      decision,
-      input,
-      today,
-      holdMinutes,
-      commitElement: true,
-    });
-  });
+        let chosen;
+        if (input.elementId) {
+          const asked = runnable.find((each) => each.element.publicId === input.elementId);
+          if (!asked) {
+            throw new RuleRefusedError('that print cannot take this booking', {
+              element: input.elementId,
+              rejected: rejected.map((each) => ({
+                element: each.element.publicId,
+                problems: each.problems,
+              })),
+            });
+          }
+          chosen = asked;
+        } else {
+          [chosen] = runnable;
+        }
+        if (!chosen) {
+          throw new RuleRefusedError('no print of this title can play at this house', {
+            rejected: rejected.map((each) => ({
+              element: each.element.publicId,
+              problems: each.problems,
+            })),
+            unavailable: unavailable.map((each) => each.publicId),
+          });
+        }
+
+        return holdBooking({
+          session,
+          title,
+          venue,
+          element: chosen.element,
+          decision,
+          input,
+          today,
+          holdMinutes,
+          commitElement: true,
+        });
+      }),
+    { attempts, sleep },
+  );
 }
 
 /**
@@ -283,7 +291,7 @@ async function holdBooking({
       { session },
     );
     if (result.matchedCount === 0) {
-      throw new ConflictError('that print was committed by somebody else, try again', {
+      throw retryableConflict('that print was committed by somebody else, try again', {
         element: element.publicId,
       });
     }

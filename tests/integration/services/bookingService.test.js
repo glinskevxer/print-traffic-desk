@@ -569,3 +569,120 @@ describe('settling a booking', () => {
     expect(await service.awaitingBoxOffice('2025-06-25')).toHaveLength(0);
   });
 });
+
+describe('two desks after the same print', () => {
+  let holder;
+  let title;
+  let venue;
+  let vault;
+
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  const ask = (overrides = {}) => ({
+    titleId: title.publicId,
+    venueId: venue.publicId,
+    localDate: '2025-06-20',
+    localTime: '19:30',
+    exhibitionType: 'repertory',
+    today: '2025-05-15',
+    ...overrides,
+  });
+
+  async function shelve(count) {
+    const shelf = [];
+    for (let i = 0; i < count; i += 1) {
+      shelf.push(
+        await makePrintElement({
+          title: title._id,
+          owner: holder._id,
+          currentLocation: vault._id,
+          custodian: vault._id,
+          status: 'available',
+        }),
+      );
+    }
+    return shelf;
+  }
+
+  it('takes the second print when the first is taken underneath it', async () => {
+    const [first] = await shelve(2);
+    const { PrintElement } = models();
+    const realUpdate = PrintElement.updateOne.bind(PrintElement);
+    let lostOnce = false;
+
+    // The other desk got there first: the conditional update misses and the
+    // print is committed by the time this one looks again.
+    jest.spyOn(PrintElement, 'updateOne').mockImplementation(async (filter, ...rest) => {
+      if (!lostOnce && String(filter._id) === String(first._id)) {
+        lostOnce = true;
+        await PrintElement.collection.updateOne(
+          { _id: first._id },
+          { $set: { status: 'committed' } },
+        );
+        return { matchedCount: 0, modifiedCount: 0 };
+      }
+      return realUpdate(filter, ...rest);
+    });
+
+    const { booking, element } = await service.requestBooking(ask(), { sleep: async () => {} });
+
+    expect(lostOnce).toBe(true);
+    expect(booking.status).toBe('held');
+    expect(String(element._id)).not.toBe(String(first._id));
+  });
+
+  it('tries again with the same print when nothing else took it after all', async () => {
+    const [only] = await shelve(1);
+    const { PrintElement } = models();
+    const realUpdate = PrintElement.updateOne.bind(PrintElement);
+    let lostOnce = false;
+
+    jest.spyOn(PrintElement, 'updateOne').mockImplementation((filter, ...rest) => {
+      if (!lostOnce) {
+        lostOnce = true;
+        return Promise.resolve({ matchedCount: 0, modifiedCount: 0 });
+      }
+      return realUpdate(filter, ...rest);
+    });
+
+    const { booking, element } = await service.requestBooking(ask(), { sleep: async () => {} });
+
+    expect(booking.status).toBe('held');
+    expect(String(element._id)).toBe(String(only._id));
+  });
+
+  it('gives up and says so when it loses every time', async () => {
+    await shelve(1);
+    const { PrintElement } = models();
+    jest.spyOn(PrintElement, 'updateOne').mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
+
+    await expect(
+      service.requestBooking(ask(), { attempts: 2, sleep: async () => {} }),
+    ).rejects.toThrow(/committed by somebody else/);
+  });
+
+  it('does not retry a refusal that would answer the same way again', async () => {
+    await shelve(1);
+    const { RightsWindow } = models();
+    await RightsWindow.updateMany({}, { $set: { territory: 'FR' } });
+
+    await expect(service.requestBooking(ask(), { sleep: async () => {} })).rejects.toThrow(
+      /no licence clears/,
+    );
+  });
+});
