@@ -6,6 +6,7 @@ const { listWith } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
 const { RuleRefusedError, ConflictError } = require('../lib/errors');
 const audit = require('../lib/audit');
+const outbox = require('../lib/outbox');
 const { totalFor } = require('../domain/royalties/compute');
 const { addDays } = require('../lib/dates');
 
@@ -139,6 +140,24 @@ async function issueStatement(publicId, issuedOn) {
     statement.issuedOn = issuedOn;
     statement.dueOn = addDays(issuedOn, holder.settlementDays);
     await statement.save({ session });
+
+    await outbox.enqueue(
+      {
+        kind: 'statement.issued',
+        subjectType: 'royalty-statement',
+        subjectId: statement.publicId,
+        to: holder.name,
+        channel: 'email',
+        payload: {
+          periodStartsOn: statement.periodStartsOn,
+          periodEndsOn: statement.periodEndsOn,
+          totalMinor: statement.totalMinor,
+          currency: statement.currency,
+          dueOn: statement.dueOn,
+        },
+      },
+      { session },
+    );
 
     await audit.record(
       {

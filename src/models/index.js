@@ -18,6 +18,7 @@ const definitions = [
   require('./operator'),
   require('./rateCounter'),
   require('./migration'),
+  require('./outboxMessage'),
 ];
 
 const registered = new WeakMap();

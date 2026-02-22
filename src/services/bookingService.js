@@ -7,6 +7,7 @@ const { withTransaction } = require('../db/connection');
 const { RuleRefusedError } = require('../lib/errors');
 const { retryOnConflict, retryableConflict } = require('../lib/conflicts');
 const audit = require('../lib/audit');
+const outbox = require('../lib/outbox');
 const { bookingReference } = require('../lib/ids');
 const { instantOf, localDateOf, addDays } = require('../lib/dates');
 const { assertTransition } = require('../domain/elements/status');
@@ -381,6 +382,25 @@ async function confirmBooking(publicId, { confirmedBy } = {}) {
     if (confirmedBy) booking.bookedBy = confirmedBy;
     await booking.save({ session });
 
+    await outbox.enqueue(
+      {
+        kind: 'booking.confirmed',
+        subjectType: 'booking',
+        subjectId: booking.publicId,
+        to: venue.code,
+        channel: 'email',
+        payload: {
+          reference: booking.reference,
+          localDate: booking.localDate,
+          localTime: booking.localTime,
+          element: element.publicId,
+          dispatchOn: legs[0].plannedDispatchOn,
+          arriveBy: legs[0].plannedArrivalOn,
+        },
+      },
+      { session },
+    );
+
     await audit.record(
       {
         action: 'booking.confirmed',
@@ -438,6 +458,20 @@ async function releaseBooking(booking, { session, nextStatus, reason, feeMinor }
   booking.status = nextStatus;
   booking.cancellation = { reason: reason || null, at: new Date(), feeMinor: feeMinor ?? null };
   await booking.save({ session });
+
+  if (nextStatus === 'cancelled') {
+    await outbox.enqueue(
+      {
+        kind: 'booking.cancelled',
+        subjectType: 'booking',
+        subjectId: booking.publicId,
+        to: String(booking.venue),
+        channel: 'email',
+        payload: { reference: booking.reference, localDate: booking.localDate, reason },
+      },
+      { session },
+    );
+  }
 
   await audit.record(
     {
