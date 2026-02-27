@@ -22,6 +22,7 @@ const COMMANDS = [
   require('./commands/expireWindows'),
   require('./commands/chaseTraffic'),
   require('./commands/buildStatements'),
+  require('./commands/outbox'),
 ];
 
 const BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));

@@ -58,6 +58,7 @@ const schema = z
     RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(100000).default(120),
     RATE_LIMIT_SIGN_IN_MAX: z.coerce.number().int().min(1).max(1000).default(10),
     REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300000).default(20000),
+    OUTBOX_WEBHOOK_URL: z.string().url().optional(),
   })
   .refine((env) => !env.EXTRACTION_ENABLED || Boolean(env.OPENAI_API_KEY), {
     message: 'EXTRACTION_ENABLED needs OPENAI_API_KEY',
@@ -89,6 +90,7 @@ function parseEnv(source = process.env) {
     isProduction: env.NODE_ENV === 'production',
     isTest: env.NODE_ENV === 'test',
     serviceName: env.SERVICE_NAME,
+    outbox: Object.freeze({ webhookUrl: env.OUTBOX_WEBHOOK_URL || null }),
     rateLimit: Object.freeze({
       windowMs: env.RATE_LIMIT_WINDOW_MS,
       max: env.RATE_LIMIT_MAX,
