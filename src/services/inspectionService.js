@@ -10,6 +10,7 @@ const { withoutRestrictions } = require('../domain/handling');
 const { assertTransition, statusAfterVerdict, isTerminal } = require('../domain/elements/status');
 const { localDateOf } = require('../lib/dates');
 const audit = require('../lib/audit');
+const outbox = require('../lib/outbox');
 
 async function loadElement(publicId, session = null) {
   const { PrintElement } = models();
@@ -184,7 +185,85 @@ async function dueForInspection({ limit = 50 } = {}) {
     .limit(limit);
 }
 
+/**
+ * How far past its interval a print has to be before the desk stops asking and
+ * takes it off the shelf. Three times the interval is a print that has been
+ * run twenty times without anybody opening the can.
+ */
+const OVERDUE_MULTIPLE = 3;
+
+/**
+ * Takes badly overdue prints off the shelf and tells whoever owns them.
+ *
+ * This is deliberately blunt. A print nobody has inspected in twenty
+ * screenings is not a print the desk knows the condition of, and a booking
+ * made against a condition grade from a year ago is a booking made on a guess.
+ */
+async function quarantineOverdue({ limit = 50, now = new Date() } = {}) {
+  const { PrintElement, RightsHolder } = models();
+
+  const overdue = await PrintElement.find({
+    status: { $in: ['available', 'intake'] },
+    $expr: {
+      $gte: [
+        '$screeningsSinceInspection',
+        { $multiply: ['$inspectionIntervalScreenings', OVERDUE_MULTIPLE] },
+      ],
+    },
+  }).limit(limit);
+
+  const taken = [];
+  for (const element of overdue) {
+    // eslint-disable-next-line no-await-in-loop
+    await withTransaction(async (session) => {
+      const fresh = await PrintElement.findById(element._id, null, { session });
+      if (!['available', 'intake'].includes(fresh.status)) return;
+
+      const before = fresh.status;
+      fresh.status = 'quarantined';
+      fresh.provenance = `${fresh.provenance ? `${fresh.provenance}\n` : ''}quarantined on ${now
+        .toISOString()
+        .slice(0, 10)}: ${fresh.screeningsSinceInspection} screenings since the last inspection`;
+      await fresh.save({ session });
+
+      const owner = await RightsHolder.findById(fresh.owner, 'name', { session });
+      await outbox.enqueue(
+        {
+          kind: 'element.quarantined',
+          subjectType: 'print-element',
+          subjectId: fresh.publicId,
+          to: owner ? owner.name : 'unknown owner',
+          channel: 'email',
+          payload: {
+            barcode: fresh.barcode,
+            screeningsSinceInspection: fresh.screeningsSinceInspection,
+            interval: fresh.inspectionIntervalScreenings,
+          },
+        },
+        { session },
+      );
+
+      await audit.record(
+        {
+          action: 'element.quarantined-overdue',
+          subjectType: 'print-element',
+          subjectId: fresh.publicId,
+          changes: [{ field: 'status', before, after: 'quarantined' }],
+          metadata: { screeningsSinceInspection: fresh.screeningsSinceInspection },
+        },
+        { session },
+      );
+
+      taken.push(fresh.publicId);
+    });
+  }
+
+  return taken;
+}
+
 module.exports = {
+  quarantineOverdue,
+  OVERDUE_MULTIPLE,
   previewInspection,
   recordInspection,
   getInspection,

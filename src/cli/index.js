@@ -22,6 +22,7 @@ const COMMANDS = [
   require('./commands/expireWindows'),
   require('./commands/chaseTraffic'),
   require('./commands/buildStatements'),
+  require('./commands/quarantineOverdue'),
   require('./commands/outbox'),
 ];
 

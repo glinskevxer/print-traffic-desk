@@ -1,7 +1,9 @@
 'use strict';
 
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { makePrintElement, makeVenue } = require('../../helpers/factories');
+const { makePrintElement, makeVenue, makeRightsHolder } = require('../../helpers/factories');
+const { models } = require('../../../src/models');
+const outbox = require('../../../src/lib/outbox');
 const service = require('../../../src/services/inspectionService');
 
 describe('recording an inspection', () => {
@@ -260,5 +262,112 @@ describe('the inspection queue', () => {
     expect((await service.dueForInspection()).map((each) => each.publicId)).toContain(
       element.publicId,
     );
+  });
+});
+
+describe('taking badly overdue prints off the shelf', () => {
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+  });
+
+  it('leaves a print that is only a little overdue', async () => {
+    await makePrintElement({ screeningsSinceInspection: 8, inspectionIntervalScreenings: 6 });
+
+    expect(await service.quarantineOverdue()).toEqual([]);
+  });
+
+  it('takes a print that is three intervals past its look', async () => {
+    const element = await makePrintElement({
+      screeningsSinceInspection: 18,
+      inspectionIntervalScreenings: 6,
+    });
+
+    const taken = await service.quarantineOverdue();
+
+    expect(taken).toEqual([element.publicId]);
+    expect((await models().PrintElement.findById(element._id)).status).toBe('quarantined');
+  });
+
+  it('says on the record why it went', async () => {
+    const element = await makePrintElement({
+      screeningsSinceInspection: 20,
+      inspectionIntervalScreenings: 6,
+    });
+
+    await service.quarantineOverdue({ now: new Date('2026-03-01T09:00:00Z') });
+
+    const fresh = await models().PrintElement.findById(element._id);
+    expect(fresh.provenance).toMatch(/quarantined on 2026-03-01/);
+    expect(fresh.provenance).toMatch(/20 screenings since the last inspection/);
+  });
+
+  it('tells whoever owns the print', async () => {
+    const owner = await makeRightsHolder({ name: 'BFI National Archive', kind: 'archive' });
+    await makePrintElement({
+      owner: owner._id,
+      screeningsSinceInspection: 30,
+      inspectionIntervalScreenings: 6,
+    });
+
+    await service.quarantineOverdue();
+
+    const [note] = (await outbox.listMessages({ kind: 'element.quarantined' })).items;
+    expect(note.to).toBe('BFI National Archive');
+    expect(note.payload.screeningsSinceInspection).toBe(30);
+  });
+
+  it('leaves a print that is already committed to a booking alone', async () => {
+    await makePrintElement({
+      status: 'committed',
+      screeningsSinceInspection: 30,
+      inspectionIntervalScreenings: 6,
+    });
+
+    expect(await service.quarantineOverdue()).toEqual([]);
+  });
+
+  it('stops at the limit it was given', async () => {
+    for (let i = 0; i < 4; i += 1) {
+      await makePrintElement({ screeningsSinceInspection: 30, inspectionIntervalScreenings: 6 });
+    }
+
+    expect(await service.quarantineOverdue({ limit: 2 })).toHaveLength(2);
+  });
+
+  it('records what it did in the audit trail', async () => {
+    const element = await makePrintElement({
+      screeningsSinceInspection: 30,
+      inspectionIntervalScreenings: 6,
+    });
+
+    await service.quarantineOverdue();
+
+    const [event] = await models().AuditEvent.find({ subjectId: element.publicId });
+    expect(event.action).toBe('element.quarantined-overdue');
+    expect(event.changes[0].after).toBe('quarantined');
+  });
+
+  it('an inspection puts it straight back', async () => {
+    const element = await makePrintElement({
+      screeningsSinceInspection: 30,
+      inspectionIntervalScreenings: 6,
+    });
+    await service.quarantineOverdue();
+
+    const { element: updated } = await service.recordInspection(element.publicId, {
+      inspector: 'R. Fitzgerald',
+      kind: 'routine',
+    });
+
+    expect(updated.status).toBe('available');
+    expect(updated.screeningsSinceInspection).toBe(0);
   });
 });
