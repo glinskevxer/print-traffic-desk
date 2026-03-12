@@ -686,3 +686,216 @@ describe('two desks after the same print', () => {
     );
   });
 });
+
+describe('changing the print on a booking', () => {
+  let holder;
+  let title;
+  let venue;
+  let vault;
+  let original;
+  let spare;
+
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    original = await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+      conditionGrade: 'A',
+    });
+    spare = await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+      conditionGrade: 'C',
+    });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  async function held() {
+    const { booking } = await service.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+      elementId: original.publicId,
+    });
+    return booking;
+  }
+
+  it('swaps the print and gives the old one back', async () => {
+    const booking = await held();
+
+    const result = await service.amendElement(booking.publicId, {
+      elementId: spare.publicId,
+      reason: 'failed its pre despatch inspection',
+      today: '2025-05-15',
+    });
+
+    expect(String(result.booking.element)).toBe(String(spare._id));
+    const { PrintElement } = models();
+    expect((await PrintElement.findById(original._id)).status).toBe('available');
+    expect((await PrintElement.findById(spare._id)).status).toBe('committed');
+  });
+
+  it('works the traffic plan out again for the print it is now sending', async () => {
+    const booking = await held();
+    // The spare is overdue a look, so the plan has to leave bench time the
+    // original did not need.
+    spare.screeningsSinceInspection = 30;
+    spare.inspectionIntervalScreenings = 6;
+    await spare.save();
+
+    const result = await service.amendElement(booking.publicId, {
+      elementId: spare.publicId,
+      reason: 'the first print is damaged',
+      today: '2025-05-15',
+    });
+
+    expect(result.booking.traffic.committedFrom < booking.traffic.committedFrom).toBe(true);
+    expect(result.plan.outbound.dates.inspectionStartsOn).toBe(
+      result.booking.traffic.committedFrom,
+    );
+  });
+
+  it('stands down the legs the old print was going to travel on', async () => {
+    const booking = await held();
+    await service.confirmBooking(booking.publicId);
+
+    const result = await service.amendElement(booking.publicId, {
+      elementId: spare.publicId,
+      reason: 'perforation damage found',
+      today: '2025-05-15',
+    });
+
+    expect(result.legsStoodDown).toBe(2);
+    expect(await models().Shipment.countDocuments({ status: 'cancelled' })).toBe(2);
+  });
+
+  it('keeps the licence it cleared under', async () => {
+    const booking = await held();
+    const before = booking.clearance.windowId;
+
+    const result = await service.amendElement(booking.publicId, {
+      elementId: spare.publicId,
+      reason: 'damaged',
+      today: '2025-05-15',
+    });
+
+    expect(result.booking.clearance.windowId).toBe(before);
+    expect((await models().RightsWindow.findOne({ title: title._id })).screeningsUsed).toBe(1);
+  });
+
+  it('refuses a print of another title', async () => {
+    const booking = await held();
+    const other = await makePrintElement({ status: 'available' });
+
+    await expect(
+      service.amendElement(booking.publicId, {
+        elementId: other.publicId,
+        reason: 'damaged',
+        today: '2025-05-15',
+      }),
+    ).rejects.toThrow(/different title/);
+  });
+
+  it('refuses a print the booth cannot run', async () => {
+    const booking = await held();
+    spare.gauge = '70mm';
+    await spare.save();
+
+    await expect(
+      service.amendElement(booking.publicId, {
+        elementId: spare.publicId,
+        reason: 'damaged',
+        today: '2025-05-15',
+      }),
+    ).rejects.toThrow(/cannot play at this house/);
+  });
+
+  it('refuses a print that is already spoken for', async () => {
+    const booking = await held();
+    spare.status = 'committed';
+    await spare.save();
+
+    await expect(
+      service.amendElement(booking.publicId, {
+        elementId: spare.publicId,
+        reason: 'damaged',
+        today: '2025-05-15',
+      }),
+    ).rejects.toThrow(/not free to take this booking/);
+  });
+
+  it('refuses the print the booking already has', async () => {
+    const booking = await held();
+
+    await expect(
+      service.amendElement(booking.publicId, {
+        elementId: original.publicId,
+        reason: 'damaged',
+        today: '2025-05-15',
+      }),
+    ).rejects.toThrow(/already has/);
+  });
+
+  it('refuses without a reason', async () => {
+    const booking = await held();
+
+    await expect(
+      service.amendElement(booking.publicId, { elementId: spare.publicId, today: '2025-05-15' }),
+    ).rejects.toThrow(/needs a reason/);
+  });
+
+  it('will not change the print on a booking that has played', async () => {
+    const booking = await held();
+    await service.confirmBooking(booking.publicId);
+    await service.reportBoxOffice(booking.publicId, {
+      grossMinor: 100000,
+      currency: 'GBP',
+      admissions: 100,
+    });
+    await service.settleBooking(booking.publicId, '2025-07-01');
+
+    await expect(
+      service.amendElement(booking.publicId, {
+        elementId: spare.publicId,
+        reason: 'too late',
+        today: '2025-05-15',
+      }),
+    ).rejects.toThrow(/has not played/);
+  });
+
+  it('records the swap and the reason', async () => {
+    const booking = await held();
+
+    await service.amendElement(booking.publicId, {
+      elementId: spare.publicId,
+      reason: 'vinegar smell in the can',
+      today: '2025-05-15',
+    });
+
+    const event = await models().AuditEvent.findOne({ action: 'booking.print-changed' });
+    expect(event.changes[0].before).toBe(original.publicId);
+    expect(event.changes[0].after).toBe(spare.publicId);
+    expect(event.metadata.reason).toBe('vinegar smell in the can');
+  });
+});

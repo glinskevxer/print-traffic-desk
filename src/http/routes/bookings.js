@@ -154,6 +154,31 @@ function bookingRoutes() {
   );
 
   router.put(
+    '/:bookingId/element',
+    requireRole('programmer'),
+    validate({
+      params: bookingParams,
+      body: z.object({
+        elementId: publicId('elem'),
+        reason: z.string().min(3).max(400),
+        today: isoDate.optional(),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const { booking, element, previous, legsStoodDown } = await service.amendElement(
+        req.valid.params.bookingId,
+        req.valid.body,
+      );
+      res.json({
+        ...bookingView(booking),
+        element: { id: element.publicId, barcode: element.barcode },
+        previous: previous ? { id: previous.publicId, barcode: previous.barcode } : null,
+        legsStoodDown,
+      });
+    }),
+  );
+
+  router.put(
     '/:bookingId/box-office',
     requireRole('programmer'),
     validate({ params: bookingParams, body: boxOfficeBody }),

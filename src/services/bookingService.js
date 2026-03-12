@@ -675,6 +675,135 @@ async function listBookings(query = {}) {
 }
 
 /**
+ * Swaps the print on a booking that has not played yet.
+ *
+ * This happens more than anything else on the desk: a print fails its
+ * pre despatch inspection on the Tuesday and the Thursday screening still has
+ * to happen. The licence does not change, the night does not change, and the
+ * traffic plan is worked out again from where the new print actually is.
+ */
+async function amendElement(publicId, { elementId, reason, today }) {
+  const { PrintElement, Venue, Shipment } = models();
+
+  return withTransaction(async (session) => {
+    const booking = await loadBooking(publicId, session);
+    if (!['held', 'confirmed'].includes(booking.status)) {
+      throw new RuleRefusedError('only a booking that has not played can change its print', {
+        booking: publicId,
+        status: booking.status,
+      });
+    }
+    if (!reason) {
+      throw new RuleRefusedError('changing the print on a booking needs a reason', {
+        booking: publicId,
+      });
+    }
+
+    const replacement = await required(PrintElement, elementId, { session });
+    if (String(replacement._id) === String(booking.element)) {
+      throw new RuleRefusedError('that is the print the booking already has', {
+        booking: publicId,
+      });
+    }
+    if (!['available', 'intake'].includes(replacement.status)) {
+      throw new RuleRefusedError('that print is not free to take this booking', {
+        element: elementId,
+        status: replacement.status,
+      });
+    }
+    if (String(replacement.title) !== String(booking.title)) {
+      throw new RuleRefusedError('that print is of a different title', { element: elementId });
+    }
+
+    const venue = await Venue.findById(booking.venue, null, { session });
+    const { compatible, problems } = boothCompatibility(replacement, venue);
+    if (!compatible) {
+      throw new RuleRefusedError('that print cannot play at this house', {
+        element: elementId,
+        problems,
+      });
+    }
+
+    const origin = await Venue.findById(replacement.currentLocation, null, { session });
+    const plan = planRoundTrip({
+      fromTerritory: origin.territory,
+      toTerritory: venue.territory,
+      outboundLeadDays: origin.outboundLeadDays,
+      inboundLeadDays: venue.inboundLeadDays,
+      inspectionDays: replacement.needsInspection() ? 3 : 0,
+      screeningLocalDate: booking.localDate,
+      holdDaysAfterScreening: 1,
+      today: today || localDateOf(new Date(), venue.timezone),
+      restrictions: replacement.handlingRestrictions,
+      baseStock: replacement.baseStock,
+    });
+    if (!plan.feasible) {
+      throw new RuleRefusedError(plan.outbound.detail, {
+        element: elementId,
+        reason: plan.outbound.reason,
+        shortfallDays: plan.outbound.shortfallDays,
+      });
+    }
+
+    const previous = await PrintElement.findById(booking.element, null, { session });
+    if (previous && previous.status === 'committed') {
+      previous.status = 'available';
+      await previous.save({ session });
+    }
+
+    const stoodDown = await Shipment.updateMany(
+      {
+        _id: {
+          $in: [booking.traffic.outboundShipment, booking.traffic.returnShipment].filter(Boolean),
+        },
+        status: 'planned',
+      },
+      { $set: { status: 'cancelled', notes: `print changed: ${reason}` } },
+      { session },
+    );
+
+    replacement.status = 'committed';
+    await replacement.save({ session });
+
+    booking.element = replacement._id;
+    booking.traffic = {
+      outboundShipment: null,
+      returnShipment: null,
+      committedFrom: plan.committedFrom,
+      committedUntil: plan.committedUntil,
+      service: plan.outbound.service,
+    };
+    booking.notes = `${booking.notes ? `${booking.notes}\n` : ''}print changed: ${reason}`;
+    await booking.save({ session });
+
+    await audit.record(
+      {
+        action: 'booking.print-changed',
+        subjectType: 'booking',
+        subjectId: booking.publicId,
+        changes: [
+          {
+            field: 'element',
+            before: previous ? previous.publicId : null,
+            after: replacement.publicId,
+          },
+        ],
+        metadata: { reason, legsStoodDown: stoodDown.modifiedCount },
+      },
+      { session },
+    );
+
+    return {
+      booking,
+      element: replacement,
+      previous,
+      plan,
+      legsStoodDown: stoodDown.modifiedCount,
+    };
+  });
+}
+
+/**
  * A run is several nights of the same title at the same house. It is not one
  * booking with a count: the box office, the royalty and the licence allowance
  * are all per screening, and a run that half clears has to say which nights.
@@ -729,6 +858,7 @@ module.exports = {
   DEFAULT_HOLD_MINUTES,
   requestBooking,
   requestRun,
+  amendElement,
   confirmBooking,
   cancelBooking,
   lapseExpiredHolds,
