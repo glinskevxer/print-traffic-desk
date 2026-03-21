@@ -5,7 +5,6 @@ const { GAUGES, SOUND_FORMATS, BASE_STOCKS, ELEMENT_KINDS } = require('../domain
 const { ALL_RESTRICTIONS } = require('../domain/handling');
 const { ALL_CODES, SEVERITIES } = require('../domain/condition/damageCodes');
 const { STATUSES } = require('../domain/elements/status');
-const { REGION_CODES } = require('../domain/rights/territories');
 const { EXHIBITION_TYPES, TERM_KINDS, WINDOW_STATUSES } = require('../models/rightsWindow');
 const { BOOKING_STATUSES } = require('../models/booking');
 const { SHIPMENT_STATUSES } = require('../models/shipment');
@@ -82,15 +81,6 @@ const LIST_PARAMETERS = [
   { name: 'order', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] } },
 ];
 
-function idParameter(name, prefix) {
-  return {
-    name,
-    in: 'path',
-    required: true,
-    schema: { type: 'string', pattern: `^${prefix}_[0-9A-Z]{16}$` },
-  };
-}
-
 function schemas() {
   return {
     Error: {
@@ -104,6 +94,36 @@ function schemas() {
             code: { type: 'string', enum: ERROR_CODES },
             message: { type: 'string' },
             details: { type: 'object', additionalProperties: true },
+          },
+        },
+      },
+    },
+    RightsHolder: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        kind: { type: 'string' },
+        remittanceCurrency: { type: 'string' },
+        settlementDays: { type: 'integer' },
+        active: { type: 'boolean' },
+      },
+    },
+    AuditEvent: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        at: { type: 'string', format: 'date-time' },
+        action: { type: 'string' },
+        subjectType: { type: 'string' },
+        subjectId: { type: 'string' },
+        actor: { type: ['string', 'null'] },
+        source: { type: 'string', enum: ['http', 'cli', 'worker', 'system'] },
+        changes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { field: { type: 'string' }, before: {}, after: {} },
           },
         },
       },
@@ -277,238 +297,793 @@ function schemas() {
   };
 }
 
-function paths() {
-  const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
+const OPERATIONS = Object.freeze([
+  {
+    method: 'get',
+    path: '/health/live',
+    tag: 'health',
+    summary: 'the process is up and answering',
+    access: 'public',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/health/ready',
+    tag: 'health',
+    summary: 'the desk can serve',
+    access: 'public',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/health/version',
+    tag: 'health',
+    summary: 'what is deployed',
+    access: 'public',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/health/openapi.json',
+    tag: 'health',
+    summary: 'this description',
+    access: 'public',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/metrics',
+    tag: 'health',
+    summary: 'the series worth alerting on',
+    access: 'public',
+    answers: 'text',
+  },
+  {
+    method: 'post',
+    path: '/auth/sign-in',
+    tag: 'auth',
+    summary: 'exchange an email and password for a session token',
+    access: 'public',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/auth/me',
+    tag: 'auth',
+    summary: 'who the token belongs to',
+    access: 'auth',
+    answers: 'Operator',
+  },
+  {
+    method: 'put',
+    path: '/auth/password',
+    tag: 'auth',
+    summary: 'change your own password',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/auth/operators',
+    tag: 'auth',
+    summary: 'the people who work this desk',
+    access: 'auth',
+    answers: 'page:Operator',
+  },
+  {
+    method: 'post',
+    path: '/auth/operators',
+    tag: 'auth',
+    summary: 'add somebody to the desk',
+    access: 'auth',
+    answers: 'Operator',
+  },
+  {
+    method: 'put',
+    path: '/auth/operators/{operatorId}/role',
+    tag: 'auth',
+    summary: 'change what somebody may do',
+    access: 'auth',
+    answers: 'Operator',
+  },
+  {
+    method: 'delete',
+    path: '/auth/operators/{operatorId}',
+    tag: 'auth',
+    summary: 'take somebody off the desk',
+    access: 'auth',
+    answers: 'Operator',
+  },
+  {
+    method: 'get',
+    path: '/titles',
+    tag: 'catalogue',
+    summary: 'the film works the desk books',
+    access: 'auth',
+    answers: 'page:Title',
+  },
+  {
+    method: 'post',
+    path: '/titles',
+    tag: 'catalogue',
+    summary: 'catalogue a film work',
+    access: 'auth',
+    answers: 'Title',
+  },
+  {
+    method: 'get',
+    path: '/titles/{titleId}',
+    tag: 'catalogue',
+    summary: 'one film work in the catalogue',
+    access: 'auth',
+    answers: 'Title',
+  },
+  {
+    method: 'patch',
+    path: '/titles/{titleId}',
+    tag: 'catalogue',
+    summary: 'correct the description of a film work',
+    access: 'auth',
+    answers: 'Title',
+  },
+  {
+    method: 'put',
+    path: '/titles/{titleId}/status',
+    tag: 'catalogue',
+    summary: 'make a title bookable, or withdraw it',
+    access: 'auth',
+    answers: 'Title',
+  },
+  {
+    method: 'get',
+    path: '/titles/{titleId}/availability',
+    tag: 'catalogue',
+    summary: 'which houses could show it, and why the rest could not',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/venues',
+    tag: 'catalogue',
+    summary: 'the houses the desk ships to',
+    access: 'auth',
+    answers: 'page:Venue',
+  },
+  {
+    method: 'post',
+    path: '/venues',
+    tag: 'catalogue',
+    summary: 'put a house on file',
+    access: 'auth',
+    answers: 'Venue',
+  },
+  {
+    method: 'get',
+    path: '/venues/{venueId}',
+    tag: 'catalogue',
+    summary: 'one house on file',
+    access: 'auth',
+    answers: 'Venue',
+  },
+  {
+    method: 'patch',
+    path: '/venues/{venueId}',
+    tag: 'catalogue',
+    summary: 'correct a house address or its lead days',
+    access: 'auth',
+    answers: 'Venue',
+  },
+  {
+    method: 'put',
+    path: '/venues/{venueId}/booth',
+    tag: 'catalogue',
+    summary: 'change what the booth can run',
+    access: 'auth',
+    answers: 'Venue',
+  },
+  {
+    method: 'put',
+    path: '/venues/{venueId}/active',
+    tag: 'catalogue',
+    summary: 'open or close a house to bookings',
+    access: 'auth',
+    answers: 'Venue',
+  },
+  {
+    method: 'get',
+    path: '/venues/{venueId}/diary',
+    tag: 'catalogue',
+    summary: 'what a house has on, with the print and its leg',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/rights-holders',
+    tag: 'catalogue',
+    summary: 'the parties who can licence a title',
+    access: 'auth',
+    answers: 'page:RightsHolder',
+  },
+  {
+    method: 'post',
+    path: '/rights-holders',
+    tag: 'catalogue',
+    summary: 'put a licensor on file',
+    access: 'auth',
+    answers: 'RightsHolder',
+  },
+  {
+    method: 'get',
+    path: '/rights-holders/{holderId}',
+    tag: 'catalogue',
+    summary: 'one licensor on file',
+    access: 'auth',
+    answers: 'RightsHolder',
+  },
+  {
+    method: 'patch',
+    path: '/rights-holders/{holderId}',
+    tag: 'catalogue',
+    summary: 'correct a licensor contact or terms',
+    access: 'auth',
+    answers: 'RightsHolder',
+  },
+  {
+    method: 'put',
+    path: '/rights-holders/{holderId}/remittance-currency',
+    tag: 'catalogue',
+    summary: 'change the currency a licensor is paid in',
+    access: 'auth',
+    answers: 'RightsHolder',
+  },
+  {
+    method: 'delete',
+    path: '/rights-holders/{holderId}',
+    tag: 'catalogue',
+    summary: 'stop trading with a licensor',
+    access: 'auth',
+    answers: 'RightsHolder',
+  },
+  {
+    method: 'get',
+    path: '/elements',
+    tag: 'shelf',
+    summary: 'the physical prints',
+    access: 'auth',
+    answers: 'page:PrintElement',
+  },
+  {
+    method: 'post',
+    path: '/elements',
+    tag: 'shelf',
+    summary: 'catalogue a physical print',
+    access: 'auth',
+    answers: 'PrintElement',
+  },
+  {
+    method: 'get',
+    path: '/elements/{elementId}',
+    tag: 'shelf',
+    summary: 'one print on the shelf',
+    access: 'auth',
+    answers: 'PrintElement',
+  },
+  {
+    method: 'put',
+    path: '/elements/{elementId}/location',
+    tag: 'shelf',
+    summary: 'correct where a print is',
+    access: 'auth',
+    answers: 'PrintElement',
+  },
+  {
+    method: 'put',
+    path: '/elements/{elementId}/status',
+    tag: 'shelf',
+    summary: 'move a print through the status machine',
+    access: 'auth',
+    answers: 'PrintElement',
+  },
+  {
+    method: 'get',
+    path: '/elements/{elementId}/provenance',
+    tag: 'shelf',
+    summary: 'where a print has been and what happened to it',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/elements/{elementId}/compatibility/{venueId}',
+    tag: 'shelf',
+    summary: 'whether a booth can run a given print',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/elements/{elementId}/inspections',
+    tag: 'shelf',
+    summary: 'the condition history of one print',
+    access: 'auth',
+    answers: 'page:InspectionReport',
+  },
+  {
+    method: 'post',
+    path: '/elements/{elementId}/inspections',
+    tag: 'shelf',
+    summary: 'file a condition report and move the print with it',
+    access: 'auth',
+    answers: 'InspectionReport',
+  },
+  {
+    method: 'post',
+    path: '/elements/{elementId}/inspections/preview',
+    tag: 'shelf',
+    summary: 'what a report would grade, without filing it',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/inspections',
+    tag: 'shelf',
+    summary: 'condition reports across the collection',
+    access: 'auth',
+    answers: 'page:InspectionReport',
+  },
+  {
+    method: 'get',
+    path: '/inspections/{inspectionId}',
+    tag: 'shelf',
+    summary: 'one condition report',
+    access: 'auth',
+    answers: 'InspectionReport',
+  },
+  {
+    method: 'get',
+    path: '/inspections/due',
+    tag: 'shelf',
+    summary: 'the prints due a look, worst first',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/rights-windows',
+    tag: 'rights',
+    summary: 'the licences on file',
+    access: 'auth',
+    answers: 'page:RightsWindow',
+  },
+  {
+    method: 'post',
+    path: '/rights-windows',
+    tag: 'rights',
+    summary: 'write a licence as a draft',
+    access: 'auth',
+    answers: 'RightsWindow',
+  },
+  {
+    method: 'get',
+    path: '/rights-windows/{windowId}',
+    tag: 'rights',
+    summary: 'one licence window',
+    access: 'auth',
+    answers: 'RightsWindow',
+  },
+  {
+    method: 'put',
+    path: '/rights-windows/{windowId}/activate',
+    tag: 'rights',
+    summary: 'make a licence live, once no exclusive contradicts it',
+    access: 'auth',
+    answers: 'RightsWindow',
+  },
+  {
+    method: 'put',
+    path: '/rights-windows/{windowId}/suspend',
+    tag: 'rights',
+    summary: 'stop a licence clearing anything, with a reason',
+    access: 'auth',
+    answers: 'RightsWindow',
+  },
+  {
+    method: 'get',
+    path: '/clearance',
+    tag: 'rights',
+    summary: 'could this house show this title on this date',
+    access: 'auth',
+    answers: 'ClearanceDecision',
+  },
+  {
+    method: 'get',
+    path: '/bookings',
+    tag: 'bookings',
+    summary: 'the booking diary',
+    access: 'auth',
+    answers: 'page:Booking',
+  },
+  {
+    method: 'post',
+    path: '/bookings',
+    tag: 'bookings',
+    summary: 'hold a screening, if the licence, a print and the calendar agree',
+    access: 'idempotent',
+    answers: 'Booking',
+  },
+  {
+    method: 'post',
+    path: '/bookings/runs',
+    tag: 'bookings',
+    summary: 'hold a run of nights on one print, or none of them',
+    access: 'idempotent',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/bookings/{bookingId}',
+    tag: 'bookings',
+    summary: 'one booking in the diary',
+    access: 'auth',
+    answers: 'Booking',
+  },
+  {
+    method: 'put',
+    path: '/bookings/{bookingId}/confirm',
+    tag: 'bookings',
+    summary: 'turn a hold into two print legs',
+    access: 'auth',
+    answers: 'Booking',
+  },
+  {
+    method: 'put',
+    path: '/bookings/{bookingId}/element',
+    tag: 'bookings',
+    summary: 'swap the print, keeping the licence and the night',
+    access: 'auth',
+    answers: 'Booking',
+  },
+  {
+    method: 'put',
+    path: '/bookings/{bookingId}/box-office',
+    tag: 'bookings',
+    summary: 'report the takings and work the royalty out',
+    access: 'auth',
+    answers: 'Booking',
+  },
+  {
+    method: 'put',
+    path: '/bookings/{bookingId}/settle',
+    tag: 'bookings',
+    summary: 'close a booking once the money is accounted for',
+    access: 'auth',
+    answers: 'Booking',
+  },
+  {
+    method: 'delete',
+    path: '/bookings/{bookingId}',
+    tag: 'bookings',
+    summary: 'cancel a booking and stand down its legs',
+    access: 'auth',
+    answers: 'Booking',
+  },
+  {
+    method: 'get',
+    path: '/bookings/awaiting-box-office',
+    tag: 'bookings',
+    summary: 'screenings that have played with no takings reported',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/shipments',
+    tag: 'traffic',
+    summary: 'the legs, planned and past',
+    access: 'auth',
+    answers: 'page:Shipment',
+  },
+  {
+    method: 'post',
+    path: '/shipments',
+    tag: 'traffic',
+    summary: 'plan a leg, working the dates back from the screening',
+    access: 'auth',
+    answers: 'Shipment',
+  },
+  {
+    method: 'get',
+    path: '/shipments/{shipmentId}',
+    tag: 'traffic',
+    summary: 'one print leg',
+    access: 'auth',
+    answers: 'Shipment',
+  },
+  {
+    method: 'put',
+    path: '/shipments/{shipmentId}/dispatch',
+    tag: 'traffic',
+    summary: 'the cans have left the building',
+    access: 'auth',
+    answers: 'Shipment',
+  },
+  {
+    method: 'put',
+    path: '/shipments/{shipmentId}/arrival',
+    tag: 'traffic',
+    summary: 'the cans have landed, and what was in them',
+    access: 'auth',
+    answers: 'Shipment',
+  },
+  {
+    method: 'put',
+    path: '/shipments/{shipmentId}/delay',
+    tag: 'traffic',
+    summary: 'the leg is running late',
+    access: 'auth',
+    answers: 'Shipment',
+  },
+  {
+    method: 'put',
+    path: '/shipments/{shipmentId}/lost',
+    tag: 'traffic',
+    summary: 'the leg is lost and the print is retired',
+    access: 'auth',
+    answers: 'Shipment',
+  },
+  {
+    method: 'get',
+    path: '/shipments/overdue',
+    tag: 'traffic',
+    summary: 'legs that should have landed by now',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/royalty-statements',
+    tag: 'money',
+    summary: 'the statements raised',
+    access: 'auth',
+    answers: 'page:RoyaltyStatement',
+  },
+  {
+    method: 'post',
+    path: '/royalty-statements',
+    tag: 'money',
+    summary: 'build a period statement from the settled screenings',
+    access: 'auth',
+    answers: 'RoyaltyStatement',
+  },
+  {
+    method: 'get',
+    path: '/royalty-statements/{statementId}',
+    tag: 'money',
+    summary: 'one royalty statement',
+    access: 'auth',
+    answers: 'RoyaltyStatement',
+  },
+  {
+    method: 'get',
+    path: '/royalty-statements/{statementId}/export.csv',
+    tag: 'money',
+    summary: 'the statement in the format an accounts package reads',
+    access: 'csv',
+    answers: 'text',
+  },
+  {
+    method: 'put',
+    path: '/royalty-statements/{statementId}/issue',
+    tag: 'money',
+    summary: 'freeze the lines and start the payment clock',
+    access: 'auth',
+    answers: 'RoyaltyStatement',
+  },
+  {
+    method: 'put',
+    path: '/royalty-statements/{statementId}/payment',
+    tag: 'money',
+    summary: 'record what was paid against a statement',
+    access: 'auth',
+    answers: 'RoyaltyStatement',
+  },
+  {
+    method: 'delete',
+    path: '/royalty-statements/{statementId}',
+    tag: 'money',
+    summary: 'void a statement that was built wrong',
+    access: 'auth',
+    answers: 'RoyaltyStatement',
+  },
+  {
+    method: 'post',
+    path: '/extractions/licence-letters',
+    tag: 'extraction',
+    summary: 'read a licence letter into a draft licence for review',
+    access: 'idempotent',
+    answers: 'ExtractionJob',
+  },
+  {
+    method: 'post',
+    path: '/extractions/bench-notes',
+    tag: 'extraction',
+    summary: "read an inspector's shorthand into structured findings",
+    access: 'idempotent',
+    answers: 'ExtractionJob',
+  },
+  {
+    method: 'get',
+    path: '/extractions',
+    tag: 'extraction',
+    summary: 'the readings, and which are waiting for a human',
+    access: 'auth',
+    answers: 'page:ExtractionJob',
+  },
+  {
+    method: 'get',
+    path: '/extractions/{jobId}',
+    tag: 'extraction',
+    summary: 'one reading, with what it answered',
+    access: 'auth',
+    answers: 'ExtractionJob',
+  },
+  {
+    method: 'put',
+    path: '/extractions/{jobId}/apply',
+    tag: 'extraction',
+    summary: 'a human turns a reading into a record',
+    access: 'auth',
+    answers: 'ExtractionJob',
+  },
+  {
+    method: 'put',
+    path: '/extractions/{jobId}/reject',
+    tag: 'extraction',
+    summary: 'a human throws a reading away, with a reason',
+    access: 'auth',
+    answers: 'ExtractionJob',
+  },
+  {
+    method: 'get',
+    path: '/extractions/spend',
+    tag: 'extraction',
+    summary: 'what extraction has cost over a period',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/audit-events',
+    tag: 'audit',
+    summary: 'who changed what, across the desk',
+    access: 'auth',
+    answers: 'page:AuditEvent',
+  },
+  {
+    method: 'get',
+    path: '/audit-events/{subjectType}/{subjectId}',
+    tag: 'audit',
+    summary: 'the trail for one record',
+    access: 'auth',
+    answers: 'page:AuditEvent',
+  },
+  {
+    method: 'get',
+    path: '/audit-events/{subjectType}/{subjectId}/actors',
+    tag: 'audit',
+    summary: 'who has touched one record, and how often',
+    access: 'auth',
+    answers: 'object',
+  },
+]);
 
+const SUCCESS_STATUS = Object.freeze({ post: 201, delete: 200, put: 200, patch: 200, get: 200 });
+
+/**
+ * The parameters a path declares are read off the path itself, so a route with
+ * an id in it cannot be documented without one.
+ */
+function parametersFor(path) {
+  const names = [...path.matchAll(/\{(\w+)\}/g)].map(([, name]) => name);
+
+  return names.map((name) => {
+    const prefix = PARAMETER_PREFIXES[name];
+    return {
+      name,
+      in: 'path',
+      required: true,
+      schema: prefix
+        ? { type: 'string', pattern: `^${prefix}_[0-9A-Z]{16}$` }
+        : { type: 'string', minLength: 1, maxLength: 60 },
+    };
+  });
+}
+
+const PARAMETER_PREFIXES = Object.freeze({
+  titleId: 'ttl',
+  venueId: 'ven',
+  holderId: 'rh',
+  elementId: 'elem',
+  inspectionId: 'insp',
+  windowId: 'rw',
+  bookingId: 'bkg',
+  shipmentId: 'shp',
+  statementId: 'stmt',
+  jobId: 'exj',
+  operatorId: 'op',
+});
+
+function responseFor(answers, status) {
+  if (answers === 'text') {
+    return {
+      [status]: {
+        description: 'a plain text answer',
+        content: { 'text/plain': { schema: { type: 'string' } } },
+      },
+    };
+  }
+  if (answers.startsWith('page:')) {
+    return { [status]: pagedResponse({ $ref: `#/components/schemas/${answers.slice(5)}` }) };
+  }
+  if (answers === 'object') {
+    return { [status]: jsonResponse('the answer', { type: 'object', additionalProperties: true }) };
+  }
+  return { [status]: jsonResponse('the record', { $ref: `#/components/schemas/${answers}` }) };
+}
+
+function csvResponse() {
   return {
-    '/health/live': {
-      get: {
-        tags: ['health'],
-        summary: 'the process is up',
-        security: [],
-        responses: { 200: jsonResponse('alive', { type: 'object' }) },
-      },
-    },
-    '/health/ready': {
-      get: {
-        tags: ['health'],
-        summary: 'the desk can serve',
-        security: [],
-        responses: {
-          200: jsonResponse('ready', { type: 'object' }),
-          503: jsonResponse('not ready', { type: 'object' }),
-        },
-      },
-    },
-    '/auth/sign-in': {
-      post: {
-        tags: ['auth'],
-        summary: 'exchange an email and password for a session token',
-        security: [],
-        responses: { 200: jsonResponse('a session', { type: 'object' }), ...COMMON_ERRORS },
-      },
-    },
-    '/auth/me': {
-      get: {
-        tags: ['auth'],
-        summary: 'who the token belongs to',
-        responses: { 200: jsonResponse('the operator', ref('Operator')), ...COMMON_ERRORS },
-      },
-    },
-    '/titles': {
-      get: {
-        tags: ['catalogue'],
-        summary: 'the film works the desk books',
-        parameters: [
-          ...LIST_PARAMETERS,
-          { name: 'search', in: 'query', schema: { type: 'string' } },
-          { name: 'year', in: 'query', schema: { type: 'integer' } },
-        ],
-        responses: { 200: pagedResponse(ref('Title')), ...COMMON_ERRORS },
-      },
-      post: {
-        tags: ['catalogue'],
-        summary: 'catalogue a film work',
-        responses: { 201: jsonResponse('the title', ref('Title')), ...COMMON_ERRORS },
-      },
-    },
-    '/titles/{titleId}': {
-      get: {
-        tags: ['catalogue'],
-        summary: 'one film work',
-        parameters: [idParameter('titleId', 'ttl')],
-        responses: { 200: jsonResponse('the title', ref('Title')), ...COMMON_ERRORS },
-      },
-    },
-    '/venues': {
-      get: {
-        tags: ['catalogue'],
-        summary: 'the houses the desk ships to',
-        parameters: [
-          ...LIST_PARAMETERS,
-          { name: 'gauge', in: 'query', schema: { type: 'string', enum: GAUGES } },
-        ],
-        responses: { 200: pagedResponse(ref('Venue')), ...COMMON_ERRORS },
-      },
-    },
-    '/elements': {
-      get: {
-        tags: ['shelf'],
-        summary: 'the physical prints',
-        parameters: [
-          ...LIST_PARAMETERS,
-          { name: 'status', in: 'query', schema: { type: 'string', enum: STATUSES } },
-          { name: 'needsInspection', in: 'query', schema: { type: 'boolean' } },
-        ],
-        responses: { 200: pagedResponse(ref('PrintElement')), ...COMMON_ERRORS },
-      },
-    },
-    '/elements/{elementId}/inspections': {
-      post: {
-        tags: ['shelf'],
-        summary: 'file a condition report and move the print with it',
-        parameters: [idParameter('elementId', 'elem')],
-        responses: {
-          201: jsonResponse('the report', ref('InspectionReport')),
-          ...COMMON_ERRORS,
-        },
-      },
-    },
-    '/rights-windows': {
-      get: {
-        tags: ['rights'],
-        summary: 'the licences on file',
-        parameters: [
-          ...LIST_PARAMETERS,
-          {
-            name: 'territory',
-            in: 'query',
-            schema: { type: 'string', enum: [...REGION_CODES, 'GB', 'FR', 'DE'] },
-          },
-        ],
-        responses: { 200: pagedResponse(ref('RightsWindow')), ...COMMON_ERRORS },
-      },
-      post: {
-        tags: ['rights'],
-        summary: 'write a licence as a draft',
-        responses: { 201: jsonResponse('the licence', ref('RightsWindow')), ...COMMON_ERRORS },
-      },
-    },
-    '/clearance': {
-      get: {
-        tags: ['rights'],
-        summary: 'could this house show this title on this date',
-        parameters: [
-          { name: 'titleId', in: 'query', required: true, schema: { type: 'string' } },
-          { name: 'venueId', in: 'query', required: true, schema: { type: 'string' } },
-          {
-            name: 'localDate',
-            in: 'query',
-            required: true,
-            schema: { type: 'string', format: 'date' },
-          },
-          {
-            name: 'exhibitionType',
-            in: 'query',
-            schema: { type: 'string', enum: EXHIBITION_TYPES },
-          },
-        ],
-        responses: {
-          200: jsonResponse('the decision', ref('ClearanceDecision')),
-          ...COMMON_ERRORS,
-        },
-      },
-    },
-    '/bookings': {
-      get: {
-        tags: ['bookings'],
-        summary: 'the diary',
-        parameters: [
-          ...LIST_PARAMETERS,
-          { name: 'status', in: 'query', schema: { type: 'string', enum: BOOKING_STATUSES } },
-        ],
-        responses: { 200: pagedResponse(ref('Booking')), ...COMMON_ERRORS },
-      },
-      post: {
-        tags: ['bookings'],
-        summary: 'hold a screening, if the licence, a print and the calendar agree',
-        parameters: [
-          {
-            name: 'idempotency-key',
-            in: 'header',
-            schema: { type: 'string', minLength: 8, maxLength: 120 },
-          },
-        ],
-        responses: { 201: jsonResponse('the hold', ref('Booking')), ...COMMON_ERRORS },
-      },
-    },
-    '/shipments': {
-      get: {
-        tags: ['traffic'],
-        summary: 'the legs, planned and past',
-        parameters: [
-          ...LIST_PARAMETERS,
-          { name: 'status', in: 'query', schema: { type: 'string', enum: SHIPMENT_STATUSES } },
-        ],
-        responses: { 200: pagedResponse(ref('Shipment')), ...COMMON_ERRORS },
-      },
-      post: {
-        tags: ['traffic'],
-        summary: 'plan a leg, working the dates back from the screening',
-        responses: { 201: jsonResponse('the leg', ref('Shipment')), ...COMMON_ERRORS },
-      },
-    },
-    '/royalty-statements': {
-      get: {
-        tags: ['money'],
-        summary: 'the statements raised',
-        parameters: [
-          ...LIST_PARAMETERS,
-          { name: 'status', in: 'query', schema: { type: 'string', enum: STATEMENT_STATUSES } },
-        ],
-        responses: { 200: pagedResponse(ref('RoyaltyStatement')), ...COMMON_ERRORS },
-      },
-    },
-    '/royalty-statements/{statementId}/export.csv': {
-      get: {
-        tags: ['money'],
-        summary: 'the statement in the format an accounts package reads',
-        parameters: [idParameter('statementId', 'stmt')],
-        responses: {
-          200: {
-            description: 'the statement',
-            content: { 'text/csv': { schema: { type: 'string' } } },
-          },
-          ...COMMON_ERRORS,
-        },
-      },
-    },
-    '/extractions/licence-letters': {
-      post: {
-        tags: ['extraction'],
-        summary: 'read a licence letter into a draft licence for review',
-        responses: {
-          201: jsonResponse('a new reading', ref('ExtractionJob')),
-          200: jsonResponse(
-            'a reading of the same letter the desk already had',
-            ref('ExtractionJob'),
-          ),
-          ...COMMON_ERRORS,
-        },
-      },
-    },
-    '/extractions/{jobId}/apply': {
-      put: {
-        tags: ['extraction'],
-        summary: 'a human turns a reading into a record',
-        parameters: [idParameter('jobId', 'exj')],
-        responses: {
-          200: jsonResponse('the applied reading', ref('ExtractionJob')),
-          ...COMMON_ERRORS,
-        },
-      },
+    200: {
+      description: 'the statement as csv',
+      content: { 'text/csv': { schema: { type: 'string' } } },
     },
   };
+}
+
+const IDEMPOTENCY_PARAMETER = Object.freeze({
+  name: 'idempotency-key',
+  in: 'header',
+  description: 'a key that makes a retry replay the first answer rather than book twice',
+  schema: { type: 'string', minLength: 8, maxLength: 120 },
+});
+
+/**
+ * Builds the paths from the operation table. Nothing here is written twice:
+ * a route that is not in the table fails the contract test, and an entry with
+ * no route fails it too.
+ */
+function paths() {
+  const document = {};
+
+  for (const operation of OPERATIONS) {
+    const status = SUCCESS_STATUS[operation.method];
+    const parameters = parametersFor(operation.path);
+    if (operation.access === 'idempotent') parameters.push(IDEMPOTENCY_PARAMETER);
+    if (operation.method === 'get' && operation.answers.startsWith('page:')) {
+      parameters.push(...LIST_PARAMETERS);
+    }
+
+    const built = {
+      tags: [operation.tag],
+      summary: operation.summary,
+      responses:
+        operation.access === 'csv'
+          ? { ...csvResponse(), ...COMMON_ERRORS }
+          : { ...responseFor(operation.answers, status), ...COMMON_ERRORS },
+    };
+    if (parameters.length > 0) built.parameters = parameters;
+    if (operation.access === 'public') {
+      built.security = [];
+      built.responses = responseFor(operation.answers, status);
+    }
+
+    document[operation.path] = { ...(document[operation.path] || {}), [operation.method]: built };
+  }
+
+  return document;
 }
 
 function openapiDocument({ servers = [{ url: '/' }] } = {}) {
@@ -538,6 +1113,7 @@ function openapiDocument({ servers = [{ url: '/' }] } = {}) {
       { name: 'traffic', description: 'print legs' },
       { name: 'money', description: 'royalties and statements' },
       { name: 'extraction', description: 'reading letters and bench notes' },
+      { name: 'audit', description: 'who changed what' },
     ],
     paths: paths(),
     components: {
@@ -549,4 +1125,4 @@ function openapiDocument({ servers = [{ url: '/' }] } = {}) {
   };
 }
 
-module.exports = { openapiDocument, schemas, paths, ERROR_CODES };
+module.exports = { openapiDocument, schemas, paths, OPERATIONS, ERROR_CODES };
