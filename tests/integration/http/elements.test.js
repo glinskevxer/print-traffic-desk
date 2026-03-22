@@ -344,3 +344,157 @@ describe('where a print has been', () => {
     await request(app).get('/elements/elem_0000000000000000/provenance').expect(404);
   });
 });
+
+describe('handing a print to a different keeper', () => {
+  let app;
+  let owner;
+  let title;
+  let vault;
+  let element;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    owner = await makeRightsHolder({ name: 'BFI National Archive', kind: 'archive' });
+    title = await makeTitle({ rightsHolder: owner._id });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    element = await makePrintElement({
+      title: title._id,
+      owner: owner._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+  });
+
+  it('moves custody without moving the print', async () => {
+    const other = await makeVenue({ code: 'GB-LON-BFI' });
+
+    const res = await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ custodianId: other.publicId, reason: 'the collection moved to Stephen Street' })
+      .expect(200);
+
+    expect(res.body.changed).toEqual(['custodian']);
+    expect(res.body.provenance).toMatch(/custody changed today: the collection moved/);
+    expect(String(res.body.currentLocation)).toBe(String(vault._id));
+  });
+
+  it('changes who owns it', async () => {
+    const buyer = await makeRightsHolder({ name: 'Park Circus' });
+
+    const res = await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ ownerId: buyer.publicId, reason: 'sold with the library', effectiveOn: '2026-04-01' })
+      .expect(200);
+
+    expect(res.body.changed).toEqual(['owner']);
+    expect(res.body.provenance).toMatch(/custody changed on 2026-04-01/);
+  });
+
+  it('changes both at once', async () => {
+    const other = await makeVenue({ code: 'GB-LON-BFI' });
+    const buyer = await makeRightsHolder({ name: 'Park Circus' });
+
+    const res = await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ custodianId: other.publicId, ownerId: buyer.publicId, reason: 'library sold' })
+      .expect(200);
+
+    expect(res.body.changed.sort()).toEqual(['custodian', 'owner']);
+  });
+
+  it('refuses without naming anybody', async () => {
+    await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ reason: 'because' })
+      .expect(400);
+  });
+
+  it('refuses without a reason', async () => {
+    const other = await makeVenue({ code: 'GB-LON-BFI' });
+
+    await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ custodianId: other.publicId })
+      .expect(400);
+  });
+
+  it('refuses when nothing would actually change', async () => {
+    const res = await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ custodianId: vault.publicId, reason: 'no change' })
+      .expect(422);
+
+    expect(res.body.error.message).toMatch(/already has that keeper/);
+  });
+
+  it('will not hand over a print that is out', async () => {
+    element.status = 'on-loan';
+    await element.save();
+    const other = await makeVenue({ code: 'GB-LON-BFI' });
+
+    const res = await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ custodianId: other.publicId, reason: 'sold' })
+      .expect(422);
+
+    expect(res.body.error.message).toMatch(/bring it home/);
+  });
+
+  it('will not hand a retired print to anybody', async () => {
+    element.status = 'retired';
+    await element.save();
+    const other = await makeVenue({ code: 'GB-LON-BFI' });
+
+    await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ custodianId: other.publicId, reason: 'sold' })
+      .expect(422);
+  });
+
+  it('will not give nitrate to a house with no certificate', async () => {
+    element.baseStock = 'nitrate';
+    await element.save();
+    const uncertified = await makeVenue({ code: 'GB-LON-ICA' });
+
+    const res = await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ custodianId: uncertified.publicId, reason: 'store it closer to town' })
+      .expect(422);
+
+    expect(res.body.error.message).toMatch(/without a certificate/);
+  });
+
+  it('will not give it to a party that has stopped trading', async () => {
+    const gone = await makeRightsHolder({ name: 'Wound Up Films', active: false });
+
+    await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ ownerId: gone.publicId, reason: 'sold' })
+      .expect(422);
+  });
+
+  it('records what changed and why', async () => {
+    const other = await makeVenue({ code: 'GB-LON-BFI' });
+    await request(app)
+      .put(`/elements/${element.publicId}/custody`)
+      .send({ custodianId: other.publicId, reason: 'the collection moved' })
+      .expect(200);
+
+    const res = await request(app)
+      .get(`/audit-events/print-element/${element.publicId}`)
+      .expect(200);
+
+    expect(res.body.items[0].action).toBe('element.custody-changed');
+    expect(res.body.items[0].metadata.reason).toBe('the collection moved');
+  });
+});

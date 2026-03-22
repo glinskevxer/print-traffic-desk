@@ -213,7 +213,91 @@ async function provenanceOf(publicId, { limit = 100 } = {}) {
   };
 }
 
+/**
+ * Hands a print to a different keeper.
+ *
+ * Custody is not location. A print can sit in a vault for years while a
+ * different archive owns it, and the difference matters: the custodian is
+ * where a leg comes home to, and the owner is who is told when it is
+ * quarantined and who is asked before it travels abroad.
+ */
+async function transferCustody(publicId, { custodianId, ownerId, reason, effectiveOn }) {
+  const { Venue, RightsHolder } = models();
+
+  if (!reason) {
+    throw new RuleRefusedError('handing a print to a new keeper needs a reason', {
+      element: publicId,
+    });
+  }
+
+  return withTransaction(async (session) => {
+    const element = await getElement(publicId, session);
+
+    if (isCommitted(element.status)) {
+      throw new RuleRefusedError('this print is out, bring it home before it changes hands', {
+        element: publicId,
+        status: element.status,
+      });
+    }
+    if (element.status === 'retired') {
+      throw new RuleRefusedError('a retired print does not change hands', { element: publicId });
+    }
+
+    const changes = [];
+
+    if (custodianId) {
+      const custodian = await required(Venue, custodianId, { session });
+      if (element.baseStock === 'nitrate' && !custodian.booth.nitrateCertified) {
+        throw new RuleRefusedError('nitrate cannot be kept by a house without a certificate', {
+          venue: custodianId,
+        });
+      }
+      if (String(custodian._id) !== String(element.custodian)) {
+        changes.push({
+          field: 'custodian',
+          before: String(element.custodian),
+          after: String(custodian._id),
+        });
+        element.custodian = custodian._id;
+      }
+    }
+
+    if (ownerId) {
+      const owner = await required(RightsHolder, ownerId, { session });
+      if (!owner.active) {
+        throw new RuleRefusedError('that party is no longer trading', { owner: ownerId });
+      }
+      if (String(owner._id) !== String(element.owner)) {
+        changes.push({ field: 'owner', before: String(element.owner), after: String(owner._id) });
+        element.owner = owner._id;
+      }
+    }
+
+    if (changes.length === 0) {
+      throw new RuleRefusedError('that print already has that keeper', { element: publicId });
+    }
+
+    const stamped = effectiveOn ? `on ${effectiveOn}` : 'today';
+    element.provenance = `${element.provenance ? `${element.provenance}\n` : ''}custody changed ${stamped}: ${reason}`;
+    await element.save({ session });
+
+    await audit.record(
+      {
+        action: 'element.custody-changed',
+        subjectType: 'print-element',
+        subjectId: element.publicId,
+        changes,
+        metadata: { reason, effectiveOn: effectiveOn || null },
+      },
+      { session },
+    );
+
+    return { element, changes };
+  });
+}
+
 module.exports = {
+  transferCustody,
   provenanceOf,
   getElement,
   getElementByBarcode,

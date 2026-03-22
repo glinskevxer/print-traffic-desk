@@ -143,6 +143,31 @@ function elementRoutes() {
   );
 
   router.put(
+    '/:elementId/custody',
+    requireRole('archivist'),
+    validate({
+      params: elementParams,
+      body: z
+        .object({
+          custodianId: publicId('ven').optional(),
+          ownerId: publicId('rh').optional(),
+          reason: z.string().min(3).max(400),
+          effectiveOn: isoDate.optional(),
+        })
+        .refine((body) => body.custodianId || body.ownerId, {
+          message: 'name the new custodian, the new owner, or both',
+        }),
+    }),
+    asyncHandler(async (req, res) => {
+      const { element, changes } = await elementService.transferCustody(
+        req.valid.params.elementId,
+        req.valid.body,
+      );
+      res.json({ ...element.toJSON(), changed: changes.map((change) => change.field) });
+    }),
+  );
+
+  router.put(
     '/:elementId/status',
     requireRole('archivist'),
     validate({

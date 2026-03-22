@@ -580,6 +580,14 @@ const OPERATIONS = Object.freeze([
   },
   {
     method: 'put',
+    path: '/elements/{elementId}/custody',
+    tag: 'shelf',
+    summary: 'hand a print to a different keeper',
+    access: 'auth',
+    answers: 'PrintElement',
+  },
+  {
+    method: 'put',
     path: '/elements/{elementId}/status',
     tag: 'shelf',
     summary: 'move a print through the status machine',
