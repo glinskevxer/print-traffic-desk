@@ -988,6 +988,22 @@ const OPERATIONS = Object.freeze([
   },
   {
     method: 'get',
+    path: '/reports/shelf',
+    tag: 'shelf',
+    summary: 'the state of the shelf, counted by status, grade and gauge',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/reports/condition-trend',
+    tag: 'shelf',
+    summary: 'which prints are getting worse, and how fast',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
     path: '/audit-events',
     tag: 'audit',
     summary: 'who changed what, across the desk',

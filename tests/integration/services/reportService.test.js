@@ -1,7 +1,7 @@
 'use strict';
 
 const request = require('supertest');
-const { buildTestApp } = require('../../helpers/app');
+const { buildTestApp, stubOperator } = require('../../helpers/app');
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { models } = require('../../../src/models');
 const {
@@ -13,6 +13,7 @@ const {
 } = require('../../helpers/factories');
 const service = require('../../../src/services/reportService');
 const bookings = require('../../../src/services/bookingService');
+const inspections = require('../../../src/services/inspectionService');
 
 describe('the numbers a licensor meeting asks for', () => {
   let app;
@@ -241,5 +242,223 @@ describe('the numbers a licensor meeting asks for', () => {
 
     expect(summary.totals.screenings).toBe(0);
     expect(await models().Booking.countDocuments()).toBe(1);
+  });
+});
+
+describe('the state of the shelf', () => {
+  let app;
+  let holder;
+  let title;
+  let vault;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'BFI National Archive', kind: 'archive' });
+    title = await makeTitle({ rightsHolder: holder._id, slug: 'the-red-shoes' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+  });
+
+  async function shelve(overrides = {}) {
+    return makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      ...overrides,
+    });
+  }
+
+  it('counts an empty shelf as empty', async () => {
+    const summary = await service.shelfSummary();
+
+    expect(summary.total).toBe(0);
+    expect(summary.byStatus).toEqual({});
+    expect(summary.dueInspection).toBe(0);
+  });
+
+  it('counts by status, grade and gauge', async () => {
+    await shelve({ status: 'available', conditionGrade: 'A', gauge: '35mm' });
+    await shelve({ status: 'available', conditionGrade: 'C', gauge: '16mm' });
+    await shelve({ status: 'quarantined', conditionGrade: 'D', gauge: '35mm' });
+
+    const summary = await service.shelfSummary();
+
+    expect(summary.total).toBe(3);
+    expect(summary.byStatus).toEqual({ available: 2, quarantined: 1 });
+    expect(summary.byGrade).toEqual({ A: 1, C: 1, D: 1 });
+    expect(summary.byGauge).toEqual({ '16mm': 1, '35mm': 2 });
+  });
+
+  it('calls a print nobody has graded ungraded rather than unknown', async () => {
+    await shelve({ conditionGrade: null });
+
+    expect((await service.shelfSummary()).byGrade).toEqual({ ungraded: 1 });
+  });
+
+  it('counts what is due a look', async () => {
+    await shelve({ screeningsSinceInspection: 30, inspectionIntervalScreenings: 6 });
+    await shelve({ screeningsSinceInspection: 1, inspectionIntervalScreenings: 6 });
+
+    expect((await service.shelfSummary()).dueInspection).toBe(1);
+  });
+
+  it('narrows to one title', async () => {
+    const other = await makeTitle({ rightsHolder: holder._id, slug: 'daisies' });
+    await shelve({ status: 'available' });
+    await makePrintElement({ title: other._id, owner: holder._id, status: 'available' });
+
+    const summary = await service.shelfSummary({ titleId: title.publicId });
+
+    expect(summary.total).toBe(1);
+  });
+
+  it('answers over http', async () => {
+    await shelve({ status: 'available', conditionGrade: 'B' });
+
+    const res = await request(app).get('/reports/shelf').expect(200);
+
+    expect(res.body.total).toBe(1);
+    expect(res.body.byGrade).toEqual({ B: 1 });
+  });
+});
+
+describe('which prints are getting worse', () => {
+  let app;
+  let holder;
+  let title;
+  let vault;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'BFI National Archive', kind: 'archive' });
+    title = await makeTitle({ rightsHolder: holder._id });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+  });
+
+  async function inspect(element, when, findings) {
+    return inspections.recordInspection(element.publicId, {
+      inspector: 'R. Fitzgerald',
+      kind: 'routine',
+      inspectedAt: new Date(when),
+      findings,
+    });
+  }
+
+  it('needs more than one look to call anything a trend', async () => {
+    const element = await makePrintElement({
+      title: title._id,
+      custodian: vault._id,
+      currentLocation: vault._id,
+    });
+    await inspect(element, '2025-02-01T10:00:00Z', []);
+
+    const trend = await service.conditionTrend({ from: '2025-01-01', to: '2025-12-31' });
+
+    expect(trend.prints).toEqual([]);
+  });
+
+  it('says how many grades a print has lost', async () => {
+    const element = await makePrintElement({
+      title: title._id,
+      custodian: vault._id,
+      currentLocation: vault._id,
+      footage: 2000,
+    });
+    await inspect(element, '2025-02-01T10:00:00Z', []);
+    await inspect(element, '2025-09-01T10:00:00Z', [
+      { reel: 1, code: 'PERF-TEAR', severity: 'severe' },
+      { reel: 2, code: 'SPLICE-WEAK', severity: 'severe' },
+      { reel: 3, code: 'BRITTLE', severity: 'severe' },
+      { reel: 4, code: 'VINEGAR', severity: 'severe' },
+    ]);
+
+    const trend = await service.conditionTrend({ from: '2025-01-01', to: '2025-12-31' });
+
+    expect(trend.prints[0]).toMatchObject({ from: 'A', to: 'D', inspections: 2 });
+    expect(trend.prints[0].gradesLost).toBe(3);
+    expect(trend.prints[0].days).toBe(212);
+    expect(trend.worsening).toBe(1);
+  });
+
+  it('counts a print that held its grade as steady', async () => {
+    const element = await makePrintElement({
+      title: title._id,
+      custodian: vault._id,
+      currentLocation: vault._id,
+    });
+    await inspect(element, '2025-02-01T10:00:00Z', []);
+    await inspect(element, '2025-09-01T10:00:00Z', []);
+
+    const trend = await service.conditionTrend({ from: '2025-01-01', to: '2025-12-31' });
+
+    expect(trend.steady).toBe(1);
+    expect(trend.worsening).toBe(0);
+  });
+
+  it('leaves out inspections outside the period', async () => {
+    const element = await makePrintElement({
+      title: title._id,
+      custodian: vault._id,
+      currentLocation: vault._id,
+    });
+    await inspect(element, '2024-02-01T10:00:00Z', []);
+    await inspect(element, '2025-09-01T10:00:00Z', []);
+
+    const trend = await service.conditionTrend({ from: '2025-01-01', to: '2025-12-31' });
+
+    expect(trend.prints).toEqual([]);
+  });
+
+  it('puts the worst first', async () => {
+    const steady = await makePrintElement({
+      title: title._id,
+      custodian: vault._id,
+      currentLocation: vault._id,
+    });
+    const failing = await makePrintElement({
+      title: title._id,
+      custodian: vault._id,
+      currentLocation: vault._id,
+      footage: 2000,
+    });
+    await inspect(steady, '2025-02-01T10:00:00Z', []);
+    await inspect(steady, '2025-09-01T10:00:00Z', []);
+    await inspect(failing, '2025-02-01T10:00:00Z', []);
+    await inspect(failing, '2025-09-01T10:00:00Z', [
+      { reel: 1, code: 'PERF-TEAR', severity: 'severe' },
+    ]);
+
+    const trend = await service.conditionTrend({ from: '2025-01-01', to: '2025-12-31' });
+
+    expect(trend.prints[0].barcode).toBe(failing.barcode);
+  });
+
+  it('answers over http and needs an archivist', async () => {
+    const res = await request(app)
+      .get('/reports/condition-trend?from=2025-01-01&to=2025-12-31')
+      .expect(200);
+
+    expect(res.body.prints).toEqual([]);
+
+    const { app: viewer } = buildTestApp({ operator: stubOperator({ role: 'viewer' }) });
+    await request(viewer).get('/reports/condition-trend?from=2025-01-01&to=2025-12-31').expect(403);
   });
 });

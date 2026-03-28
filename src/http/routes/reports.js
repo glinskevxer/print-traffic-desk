@@ -56,6 +56,35 @@ function reportRoutes() {
     }),
   );
 
+  router.get(
+    '/shelf',
+    requireRole('viewer'),
+    validate({ query: z.object({ titleId: publicId('ttl').optional() }) }),
+    asyncHandler(async (req, res) => {
+      res.json(await service.shelfSummary(req.valid.query));
+    }),
+  );
+
+  router.get(
+    '/condition-trend',
+    requireRole('archivist'),
+    validate({
+      query: z
+        .object({
+          from: isoDate,
+          to: isoDate,
+          minInspections: z.coerce.number().int().min(2).max(20).default(2),
+        })
+        .refine((query) => query.from <= query.to, {
+          message: 'the period ends before it starts',
+          path: ['to'],
+        }),
+    }),
+    asyncHandler(async (req, res) => {
+      res.json(await service.conditionTrend(req.valid.query));
+    }),
+  );
+
   return router;
 }
 

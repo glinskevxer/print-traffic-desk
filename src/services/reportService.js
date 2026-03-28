@@ -167,4 +167,110 @@ async function lapsingSoon({ asOf, withinDays = 60 }) {
   }));
 }
 
-module.exports = { licenceUtilisation, licensorSummary, lapsingSoon };
+/**
+ * The state of the shelf: how many prints at each grade, how many off it, and
+ * how many are overdue a look. Counted in mongo in one pass, because a large
+ * archive holds tens of thousands of elements.
+ */
+async function shelfSummary({ titleId = null } = {}) {
+  const { PrintElement, Title } = models();
+
+  const match = {};
+  if (titleId) {
+    const title = await required(Title, titleId);
+    match.title = title._id;
+  }
+
+  const [byStatus, byGrade, overdue, byGauge] = await Promise.all([
+    PrintElement.aggregate([{ $match: match }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+    PrintElement.aggregate([
+      { $match: match },
+      { $group: { _id: '$conditionGrade', count: { $sum: 1 } } },
+    ]),
+    PrintElement.countDocuments({ ...match, ...PrintElement.dueForInspectionFilter() }),
+    PrintElement.aggregate([{ $match: match }, { $group: { _id: '$gauge', count: { $sum: 1 } } }]),
+  ]);
+
+  return {
+    total: byStatus.reduce((sum, row) => sum + row.count, 0),
+    byStatus: asCounts(byStatus),
+    byGrade: asCounts(byGrade, 'ungraded'),
+    byGauge: asCounts(byGauge),
+    dueInspection: overdue,
+  };
+}
+
+function asCounts(rows, nullKey = 'unknown') {
+  return Object.fromEntries(
+    rows
+      .map((row) => [row._id === null || row._id === undefined ? nullKey : row._id, row.count])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  );
+}
+
+/**
+ * Which prints are getting worse, and how fast. Two inspections apart in time
+ * with a worse grade the second time is the signal; one inspection is a fact
+ * and not a trend.
+ */
+async function conditionTrend({ from, to, minInspections = 2 } = {}) {
+  const { InspectionReport, PrintElement } = models();
+
+  const rows = await InspectionReport.aggregate([
+    { $match: { inspectedAt: { $gte: new Date(from), $lte: new Date(`${to}T23:59:59.999Z`) } } },
+    { $sort: { inspectedAt: 1 } },
+    {
+      $group: {
+        _id: '$element',
+        inspections: { $sum: 1 },
+        first: { $first: '$assessment' },
+        last: { $last: '$assessment' },
+        firstAt: { $first: '$inspectedAt' },
+        lastAt: { $last: '$inspectedAt' },
+      },
+    },
+    { $match: { inspections: { $gte: minInspections } } },
+  ]);
+
+  const elements = await PrintElement.find(
+    { _id: { $in: rows.map((row) => row._id) } },
+    'barcode gauge status',
+  );
+  const elementById = new Map(elements.map((each) => [String(each._id), each]));
+
+  const GRADES = ['A', 'B', 'C', 'D'];
+  const trend = rows
+    .map((row) => {
+      const element = elementById.get(String(row._id));
+      const moved = GRADES.indexOf(row.last.grade) - GRADES.indexOf(row.first.grade);
+
+      return {
+        element: element ? element.publicId : null,
+        barcode: element ? element.barcode : 'unknown',
+        inspections: row.inspections,
+        from: row.first.grade,
+        to: row.last.grade,
+        gradesLost: moved,
+        densityFrom: row.first.density,
+        densityTo: row.last.density,
+        days: Math.round((row.lastAt - row.firstAt) / 86400000),
+      };
+    })
+    .sort((a, b) => b.gradesLost - a.gradesLost || b.densityTo - a.densityTo);
+
+  return {
+    from,
+    to,
+    prints: trend,
+    worsening: trend.filter((row) => row.gradesLost > 0).length,
+    steady: trend.filter((row) => row.gradesLost === 0).length,
+  };
+}
+
+module.exports = {
+  licenceUtilisation,
+  licensorSummary,
+  lapsingSoon,
+  shelfSummary,
+  conditionTrend,
+};
