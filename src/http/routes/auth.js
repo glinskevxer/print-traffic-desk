@@ -38,7 +38,7 @@ function authRoutes() {
     '/sign-in',
     validate({ body: signInBody }),
     asyncHandler(async (req, res) => {
-      res.json(await service.signIn(req.valid.body));
+      res.json(await service.signIn({ ...req.valid.body, from: req.ip }));
     }),
   );
 

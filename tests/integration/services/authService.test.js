@@ -214,3 +214,123 @@ describe('signing an operator in', () => {
     expect(page.items[0].toJSON().passwordHash).toBeUndefined();
   });
 });
+
+describe('every attempt at the door', () => {
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+    resetConfigForTests();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    process.env.AUTH_JWT_SECRET = SECRET;
+    process.env.AUTH_MAX_FAILED_ATTEMPTS = '3';
+    resetConfigForTests();
+  });
+
+  async function anOperator(overrides = {}) {
+    return service.createOperator({
+      email: 'traffic@archive.test',
+      name: 'A. Novak',
+      role: 'traffic',
+      password: 'a-long-enough-password',
+      ...overrides,
+    });
+  }
+
+  async function attempts() {
+    const { AuditEvent } = models();
+    return AuditEvent.find({ action: /^operator\.sign-in/ }).sort({ at: 1 });
+  }
+
+  it('records a good sign in with where it came from', async () => {
+    await anOperator();
+
+    await service.signIn({
+      email: 'traffic@archive.test',
+      password: 'a-long-enough-password',
+      from: '203.0.113.7',
+    });
+
+    const [event] = await attempts();
+    expect(event.action).toBe('operator.sign-in.signed-in');
+    expect(event.metadata.from).toBe('203.0.113.7');
+    expect(event.metadata.email).toBe('traffic@archive.test');
+  });
+
+  it('records a wrong password', async () => {
+    await anOperator();
+
+    await service
+      .signIn({ email: 'traffic@archive.test', password: 'not-the-password' })
+      .catch(() => {});
+
+    const [event] = await attempts();
+    expect(event.action).toBe('operator.sign-in.wrong-password');
+  });
+
+  it('records an address nobody has, because a run of those is somebody working a list', async () => {
+    await service.signIn({ email: 'nobody@archive.test', password: 'guess' }).catch(() => {});
+
+    const [event] = await attempts();
+    expect(event.action).toBe('operator.sign-in.no-such-operator');
+    expect(event.subjectId).toBe('unknown');
+    expect(event.metadata.email).toBe('nobody@archive.test');
+  });
+
+  it('records the attempt that locked the account, and the ones after it', async () => {
+    await anOperator();
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await service
+        .signIn({ email: 'traffic@archive.test', password: 'not-the-password' })
+        .catch(() => {});
+    }
+    await service
+      .signIn({ email: 'traffic@archive.test', password: 'a-long-enough-password' })
+      .catch(() => {});
+
+    const actions = (await attempts()).map((event) => event.action);
+    expect(actions).toEqual([
+      'operator.sign-in.wrong-password',
+      'operator.sign-in.wrong-password',
+      'operator.sign-in.wrong-password-locked',
+      'operator.sign-in.locked-out',
+    ]);
+  });
+
+  it('records an attempt on an operator who has left', async () => {
+    const operator = await anOperator();
+    await service.deactivate(operator.publicId);
+
+    await service
+      .signIn({ email: 'traffic@archive.test', password: 'a-long-enough-password' })
+      .catch(() => {});
+
+    const events = await attempts();
+    expect(events[events.length - 1].action).toBe('operator.sign-in.deactivated');
+  });
+
+  it('files the trail against the operator, not against a venue', async () => {
+    const operator = await anOperator();
+    await service.signIn({ email: 'traffic@archive.test', password: 'a-long-enough-password' });
+
+    const [event] = await attempts();
+    expect(event.subjectType).toBe('operator');
+    expect(event.subjectId).toBe(operator.publicId);
+  });
+
+  it('never puts the password anywhere near the trail', async () => {
+    await anOperator();
+    await service
+      .signIn({ email: 'traffic@archive.test', password: 'the-secret-password' })
+      .catch(() => {});
+
+    const events = await attempts();
+    expect(JSON.stringify(events)).not.toContain('the-secret-password');
+  });
+});

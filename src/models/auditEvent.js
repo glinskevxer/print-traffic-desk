@@ -4,6 +4,7 @@ const { Schema } = require('mongoose');
 const { basePlugin } = require('./plugins/base');
 
 const SUBJECT_TYPES = Object.freeze([
+  'operator',
   'title',
   'venue',
   'rights-holder',

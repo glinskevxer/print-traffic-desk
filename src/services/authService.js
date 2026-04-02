@@ -34,6 +34,20 @@ function assertPasswordStrong(password) {
   return password;
 }
 
+/**
+ * Every attempt at the door, whether it opened or not. This is the one audit
+ * line written for somebody who is not signed in, so the actor is the address
+ * that was tried rather than an operator.
+ */
+async function recordAttempt({ email, from, outcome, operator = null }) {
+  return audit.record({
+    action: `operator.sign-in.${outcome}`,
+    subjectType: 'operator',
+    subjectId: operator ? operator.publicId : 'unknown',
+    metadata: { email, from: from || null, outcome },
+  });
+}
+
 async function createOperator({ email, name, role, password, venueId }) {
   const { Operator, Venue } = models();
   assertPasswordStrong(password);
@@ -51,7 +65,7 @@ async function createOperator({ email, name, role, password, venueId }) {
 
   await audit.record({
     action: 'operator.created',
-    subjectType: 'venue',
+    subjectType: 'operator',
     subjectId: operator.publicId,
     metadata: { email: operator.email, role: operator.role },
   });
@@ -63,20 +77,25 @@ async function createOperator({ email, name, role, password, venueId }) {
  * A wrong password and an unknown address answer the same way and take about
  * the same time, so the form cannot be used to find out who has an account.
  */
-async function signIn({ email, password }, { now = new Date() } = {}) {
+async function signIn({ email, password, from = null }, { now = new Date() } = {}) {
   const { Operator } = models();
   const cfg = config();
+  const attempted = String(email).toLowerCase();
 
-  const operator = await Operator.findOne({ email: String(email).toLowerCase() }).select(
-    '+passwordHash',
-  );
+  const operator = await Operator.findOne({ email: attempted }).select('+passwordHash');
   if (!operator) {
+    // An address nobody has is still recorded. A run of these against
+    // different addresses is somebody working through a list, and that is
+    // exactly the pattern a trail should show.
+    await recordAttempt({ email: attempted, from, outcome: 'no-such-operator' });
     throw new NotAuthenticatedError('that email and password do not match an operator');
   }
   if (!operator.active) {
+    await recordAttempt({ email: attempted, from, outcome: 'deactivated', operator });
     throw new ForbiddenError('that operator no longer works this desk');
   }
   if (operator.isLocked(now)) {
+    await recordAttempt({ email: attempted, from, outcome: 'locked-out', operator });
     throw new ForbiddenError('too many failed attempts, try again later', {
       lockedUntil: operator.lockedUntil,
     });
@@ -84,11 +103,18 @@ async function signIn({ email, password }, { now = new Date() } = {}) {
 
   if (!operator.passwordMatches(password)) {
     operator.failedAttempts += 1;
-    if (operator.failedAttempts >= cfg.auth.maxFailedAttempts) {
+    const lockedNow = operator.failedAttempts >= cfg.auth.maxFailedAttempts;
+    if (lockedNow) {
       operator.lockedUntil = new Date(now.getTime() + cfg.auth.lockoutMinutes * 60000);
       operator.failedAttempts = 0;
     }
     await operator.save();
+    await recordAttempt({
+      email: attempted,
+      from,
+      outcome: lockedNow ? 'wrong-password-locked' : 'wrong-password',
+      operator,
+    });
     throw new NotAuthenticatedError('that email and password do not match an operator');
   }
 
@@ -96,6 +122,7 @@ async function signIn({ email, password }, { now = new Date() } = {}) {
   operator.lockedUntil = null;
   operator.lastSeenAt = now;
   await operator.save();
+  await recordAttempt({ email: attempted, from, outcome: 'signed-in', operator });
 
   const { token, expiresAt } = signToken({
     operator,
@@ -160,7 +187,7 @@ async function setRole(publicId, role) {
 
   await audit.record({
     action: 'operator.role-changed',
-    subjectType: 'venue',
+    subjectType: 'operator',
     subjectId: operator.publicId,
     changes: [{ field: 'role', before, after: role }],
   });
@@ -192,6 +219,7 @@ async function listOperators(query = {}) {
 
 module.exports = {
   MIN_PASSWORD_LENGTH,
+  recordAttempt,
   assertPasswordStrong,
   createOperator,
   signIn,
