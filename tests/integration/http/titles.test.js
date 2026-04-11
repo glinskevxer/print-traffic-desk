@@ -1,9 +1,17 @@
 'use strict';
 
 const request = require('supertest');
-const { buildTestApp } = require('../../helpers/app');
+const { buildTestApp, stubOperator } = require('../../helpers/app');
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
-const { makeRightsHolder, makeTitle } = require('../../helpers/factories');
+const {
+  makeRightsHolder,
+  makeTitle,
+  makeVenue,
+  makePrintElement,
+  makeRightsWindow,
+} = require('../../helpers/factories');
+const { models } = require('../../../src/models');
+const bookings = require('../../../src/services/bookingService');
 
 describe('title endpoints', () => {
   let app;
@@ -196,5 +204,143 @@ describe('title endpoints', () => {
       .expect(200);
 
     await request(app).patch(`/titles/${created.body.id}`).send({ runtimeMinutes: 10 }).expect(422);
+  });
+});
+
+describe('folding a duplicate catalogue entry', () => {
+  let app;
+  let holder;
+  let keep;
+  let fold;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    keep = await makeTitle({ rightsHolder: holder._id, slug: 'the-red-shoes', status: 'bookable' });
+    fold = await makeTitle({ rightsHolder: holder._id, slug: 'red-shoes-the', status: 'bookable' });
+  });
+
+  it('moves the prints and the licences to the entry that is kept', async () => {
+    await makePrintElement({ title: fold._id, owner: holder._id });
+    await makeRightsWindow({ title: fold._id, rightsHolder: holder._id });
+
+    const res = await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: fold.publicId, reason: 'the same film, catalogued twice' })
+      .expect(200);
+
+    expect(res.body.elementsMoved).toBe(1);
+    expect(res.body.licencesMoved).toBe(1);
+
+    const { PrintElement, RightsWindow } = models();
+    expect(await PrintElement.countDocuments({ title: keep._id })).toBe(1);
+    expect(await RightsWindow.countDocuments({ title: keep._id })).toBe(1);
+  });
+
+  it('keeps the folded entry, withdrawn and pointing at the one that stayed', async () => {
+    await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: fold.publicId, reason: 'duplicate' })
+      .expect(200);
+
+    const res = await request(app).get(`/titles/${fold.publicId}`).expect(200);
+    expect(res.body.status).toBe('withdrawn');
+    expect(res.body.withdrawnReason).toMatch(/folded into the-red-shoes/);
+  });
+
+  it('refuses to fold an entry into itself', async () => {
+    await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: keep.publicId, reason: 'duplicate' })
+      .expect(422);
+  });
+
+  it('refuses without a reason', async () => {
+    await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: fold.publicId })
+      .expect(400);
+  });
+
+  it('refuses two entries licensed by different parties', async () => {
+    const other = await makeRightsHolder({ name: 'BFI National Archive', kind: 'archive' });
+    const theirs = await makeTitle({ rightsHolder: other._id, slug: 'their-copy' });
+
+    const res = await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: theirs.publicId, reason: 'duplicate' })
+      .expect(422);
+
+    expect(res.body.error.message).toMatch(/different parties/);
+  });
+
+  it('refuses while the folded entry still has live bookings', async () => {
+    const venue = await makeVenue({ code: 'GB-LON-PRINCE' });
+    const vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    await makePrintElement({
+      title: fold._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+    await makeRightsWindow({ title: fold._id, rightsHolder: holder._id });
+    await bookings.requestBooking({
+      titleId: fold.publicId,
+      venueId: venue.publicId,
+      localDate: '2025-06-20',
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+
+    const res = await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: fold.publicId, reason: 'duplicate' })
+      .expect(422);
+
+    expect(res.body.error.details.bookings).toBe(1);
+  });
+
+  it('will not fold an entry twice', async () => {
+    await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: fold.publicId, reason: 'duplicate' })
+      .expect(200);
+
+    await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: fold.publicId, reason: 'again' })
+      .expect(422);
+  });
+
+  it('only an admin folds a catalogue entry', async () => {
+    const { app: programmer } = buildTestApp({ operator: stubOperator({ role: 'programmer' }) });
+
+    await request(programmer)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: fold.publicId, reason: 'duplicate' })
+      .expect(403);
+  });
+
+  it('says what it did in the audit trail', async () => {
+    await makePrintElement({ title: fold._id, owner: holder._id });
+    await request(app)
+      .post(`/titles/${keep.publicId}/merge`)
+      .send({ foldId: fold.publicId, reason: 'catalogued twice in 1998' })
+      .expect(200);
+
+    const res = await request(app).get(`/audit-events/title/${fold.publicId}`).expect(200);
+    expect(res.body.items[0].action).toBe('title.merged');
+    expect(res.body.items[0].metadata.elementsMoved).toBe(1);
   });
 });

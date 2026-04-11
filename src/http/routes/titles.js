@@ -89,6 +89,28 @@ function titleRoutes() {
     }),
   );
 
+  router.post(
+    '/:titleId/merge',
+    requireRole('admin'),
+    validate({
+      params: z.object({ titleId: publicId('ttl') }),
+      body: z.object({ foldId: publicId('ttl'), reason: z.string().min(3).max(400) }),
+    }),
+    asyncHandler(async (req, res) => {
+      const result = await titleService.mergeTitles({
+        keepId: req.valid.params.titleId,
+        foldId: req.valid.body.foldId,
+        reason: req.valid.body.reason,
+      });
+      res.json({
+        kept: result.keep.toJSON(),
+        folded: { id: result.fold.publicId, slug: result.fold.slug },
+        elementsMoved: result.elementsMoved,
+        licencesMoved: result.licencesMoved,
+      });
+    }),
+  );
+
   router.get(
     '/:titleId/availability',
     validate({

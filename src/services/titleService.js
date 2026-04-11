@@ -2,6 +2,8 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
+const { withTransaction } = require('../db/connection');
+const audit = require('../lib/audit');
 const { listWith, guardDuplicates } = require('../db/listing');
 const { ConflictError, RuleRefusedError } = require('../lib/errors');
 
@@ -121,7 +123,89 @@ async function setTitleStatus(publicId, status, reason) {
   return title;
 }
 
+/**
+ * Folds one catalogue entry into another.
+ *
+ * A circuit ends up with two records for one film about twice a year: somebody
+ * types the original title, somebody else types the release title, and both
+ * get prints hung off them. Deleting either loses the history, so the loser
+ * keeps its id, is marked withdrawn, and points at the winner.
+ */
+async function mergeTitles({ keepId, foldId, reason }) {
+  const { Title, PrintElement, RightsWindow, Booking } = models();
+
+  if (!reason) {
+    throw new RuleRefusedError('folding one catalogue entry into another needs a reason', {});
+  }
+  if (keepId === foldId) {
+    throw new RuleRefusedError('those are the same catalogue entry', { title: keepId });
+  }
+
+  return withTransaction(async (session) => {
+    const keep = await required(Title, keepId, { session });
+    const fold = await required(Title, foldId, { session });
+
+    if (fold.status === 'withdrawn' && fold.mergedInto) {
+      throw new RuleRefusedError('that entry has already been folded into another', {
+        title: foldId,
+        mergedInto: fold.mergedInto,
+      });
+    }
+    if (String(keep.rightsHolder) !== String(fold.rightsHolder)) {
+      throw new RuleRefusedError('those entries are licensed by different parties', {
+        keep: keepId,
+        fold: foldId,
+      });
+    }
+
+    const [elements, windows, live] = await Promise.all([
+      PrintElement.updateMany({ title: fold._id }, { $set: { title: keep._id } }, { session }),
+      RightsWindow.updateMany({ title: fold._id }, { $set: { title: keep._id } }, { session }),
+      Booking.countDocuments(
+        { title: fold._id, status: { $in: ['held', 'cleared', 'confirmed'] } },
+        { session },
+      ),
+    ]);
+
+    if (live > 0) {
+      throw new RuleRefusedError('that entry still has live bookings, move them first', {
+        title: foldId,
+        bookings: live,
+      });
+    }
+
+    fold.status = 'withdrawn';
+    fold.withdrawnReason = `folded into ${keep.slug}: ${reason}`;
+    fold.mergedInto = keep._id;
+    await fold.save({ session });
+
+    await audit.record(
+      {
+        action: 'title.merged',
+        subjectType: 'title',
+        subjectId: fold.publicId,
+        changes: [{ field: 'mergedInto', before: null, after: keep.publicId }],
+        metadata: {
+          reason,
+          keptSlug: keep.slug,
+          elementsMoved: elements.modifiedCount,
+          licencesMoved: windows.modifiedCount,
+        },
+      },
+      { session },
+    );
+
+    return {
+      keep,
+      fold,
+      elementsMoved: elements.modifiedCount,
+      licencesMoved: windows.modifiedCount,
+    };
+  });
+}
+
 module.exports = {
+  mergeTitles,
   slugify,
   uniqueSlug,
   createTitle,

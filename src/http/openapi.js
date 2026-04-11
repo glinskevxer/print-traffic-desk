@@ -435,6 +435,14 @@ const OPERATIONS = Object.freeze([
     answers: 'Title',
   },
   {
+    method: 'post',
+    path: '/titles/{titleId}/merge',
+    tag: 'catalogue',
+    summary: 'fold a duplicate catalogue entry into this one',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
     method: 'get',
     path: '/titles/{titleId}/availability',
     tag: 'catalogue',

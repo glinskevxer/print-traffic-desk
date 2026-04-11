@@ -60,12 +60,17 @@ const titleSchema = new Schema({
     index: true,
   },
   withdrawnReason: { type: String, maxlength: 500 },
+  // Set when this entry turned out to be a duplicate of another. The record
+  // stays, because prints and bookings were hung off it and a deleted id in a
+  // ledger is worse than a withdrawn one.
+  mergedInto: { type: Schema.Types.ObjectId, ref: 'Title', default: null },
 });
 
 titleSchema.plugin(basePlugin, { prefix: 'ttl' });
 titleSchema.index({ slug: 1 }, { unique: true });
 titleSchema.index({ rightsHolder: 1, status: 1 });
 titleSchema.index({ title: 'text', originalTitle: 'text' });
+titleSchema.index({ mergedInto: 1 }, { sparse: true });
 
 titleSchema.virtual('directors').get(function directors() {
   return this.credits.filter((credit) => credit.role === 'director').map((credit) => credit.name);
