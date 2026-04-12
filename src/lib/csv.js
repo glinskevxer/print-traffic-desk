@@ -53,4 +53,87 @@ function minorToDecimal(amountMinor, exponent = 2) {
   return `${sign}${digits.slice(0, -exponent)}.${digits.slice(-exponent)}`;
 }
 
-module.exports = { toCsv, toRow, escapeCell, defuseFormula, minorToDecimal, NEEDS_QUOTING };
+/**
+ * Reading is harder than writing and the desk needs it for one thing: the
+ * spreadsheet of houses an archive already keeps. A quoted field can contain
+ * commas, newlines and doubled quotes, and every one of those turned up in the
+ * first file somebody sent.
+ */
+function parseCsv(text, { header = true } = {}) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  // Whether this field was written quoted, which survives the closing quote:
+  // a quoted field keeps its spaces and an unquoted one does not.
+  let wasQuoted = false;
+
+  const pushField = () => {
+    row.push(wasQuoted ? field : field.trim());
+    field = '';
+    inQuotes = false;
+    wasQuoted = false;
+  };
+  const pushRow = () => {
+    pushField();
+    if (row.length > 1 || row[0] !== '') rows.push(row);
+    row = [];
+  };
+
+  for (let i = 0; i < text.length; i += 1) {
+    const character = text[i];
+
+    if (inQuotes) {
+      if (character === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += character;
+      }
+      continue;
+    }
+
+    if (character === '"' && field.trim() === '') {
+      inQuotes = true;
+      wasQuoted = true;
+      field = '';
+    } else if (character === ',') {
+      pushField();
+    } else if (character === '\n') {
+      pushRow();
+    } else if (character !== '\r') {
+      field += character;
+    }
+  }
+  if (field !== '' || row.length > 0) pushRow();
+
+  if (!header) return { headers: null, rows };
+
+  const [headers, ...body] = rows;
+  return {
+    headers: headers ? headers.map((name) => name.trim()) : [],
+    rows: body.map((values) =>
+      Object.fromEntries((headers || []).map((name, index) => [name.trim(), values[index] ?? ''])),
+    ),
+  };
+}
+
+/** A cell that was left blank reads as nothing, not as an empty string. */
+function blankToNull(value) {
+  return value === undefined || String(value).trim() === '' ? null : String(value).trim();
+}
+
+module.exports = {
+  toCsv,
+  toRow,
+  escapeCell,
+  defuseFormula,
+  minorToDecimal,
+  parseCsv,
+  blankToNull,
+  NEEDS_QUOTING,
+};
