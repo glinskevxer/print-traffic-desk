@@ -5,6 +5,7 @@ const { required } = require('../db/lookup');
 const { listWith, guardDuplicates } = require('../db/listing');
 const { NotFoundError, RuleRefusedError } = require('../lib/errors');
 const { assertZone } = require('../lib/dates');
+const { parseCsv, blankToNull } = require('../lib/csv');
 
 async function createVenue(input) {
   const { Venue } = models();
@@ -181,7 +182,128 @@ async function diaryFor(publicId, { from, to }) {
   return { venue, nights };
 }
 
+/**
+ * Takes the spreadsheet of houses an archive already keeps.
+ *
+ * Nothing is written until every row has been read and checked. An import that
+ * puts in the first forty rows and stops on the forty first leaves somebody
+ * working out which forty went in, and they never trust the importer again.
+ */
+const IMPORT_COLUMNS = Object.freeze([
+  'code',
+  'name',
+  'territory',
+  'city',
+  'timezone',
+  'line1',
+  'postcode',
+  'seats',
+  'currency',
+  'gauges',
+  'soundFormats',
+  'nitrateCertified',
+  'inboundLeadDays',
+  'outboundLeadDays',
+]);
+
+function rowToVenue(row, line) {
+  const problems = [];
+  const need = (name) => {
+    const value = blankToNull(row[name]);
+    if (value === null) problems.push(`${name} is missing`);
+    return value;
+  };
+
+  const venue = {
+    code: (need('code') || '').toUpperCase(),
+    name: need('name'),
+    territory: (need('territory') || '').toUpperCase(),
+    city: need('city'),
+    timezone: blankToNull(row.timezone) || 'Europe/London',
+    boxOfficeCurrency: (blankToNull(row.currency) || 'GBP').toUpperCase(),
+    seats: Number(blankToNull(row.seats) || 0),
+    address: {
+      line1: need('line1'),
+      city: blankToNull(row.city),
+      postcode: need('postcode'),
+      territory: (blankToNull(row.territory) || '').toUpperCase(),
+    },
+    booth: {
+      gauges: (blankToNull(row.gauges) || '35mm').split(/[;|]/).map((value) => value.trim()),
+      soundFormats: (blankToNull(row.soundFormats) || 'optical-mono')
+        .split(/[;|]/)
+        .map((value) => value.trim()),
+      nitrateCertified: String(blankToNull(row.nitrateCertified) || '').toLowerCase() === 'yes',
+    },
+    inboundLeadDays: Number(blankToNull(row.inboundLeadDays) || 2),
+    outboundLeadDays: Number(blankToNull(row.outboundLeadDays) || 1),
+  };
+
+  if (!Number.isInteger(venue.seats) || venue.seats < 1) problems.push('seats is not a number');
+
+  return { line, venue, problems };
+}
+
+async function importVenues(text, { dryRun = false } = {}) {
+  const { Venue } = models();
+  const { headers, rows } = parseCsv(text);
+
+  const missingColumns = ['code', 'name', 'territory', 'city', 'line1', 'postcode', 'seats'].filter(
+    (name) => !headers.includes(name),
+  );
+  if (missingColumns.length > 0) {
+    throw new RuleRefusedError('that file is missing columns the desk needs', {
+      missing: missingColumns,
+      expected: IMPORT_COLUMNS,
+    });
+  }
+
+  const read = rows.map((row, index) => rowToVenue(row, index + 2));
+  const broken = read.filter((entry) => entry.problems.length > 0);
+
+  const codes = read.map((entry) => entry.venue.code);
+  const repeated = codes.filter((code, index) => codes.indexOf(code) !== index);
+  if (repeated.length > 0) {
+    broken.push({ line: 0, problems: [`${[...new Set(repeated)].join(', ')} appears twice`] });
+  }
+
+  const existing = await Venue.find({ code: { $in: codes } }, 'code');
+  const alreadyOnFile = existing.map((venue) => venue.code);
+
+  if (broken.length > 0) {
+    throw new RuleRefusedError('that file has rows the desk cannot read', {
+      rows: broken.map((entry) => ({ line: entry.line, problems: entry.problems })),
+    });
+  }
+
+  const toAdd = read.filter((entry) => !alreadyOnFile.includes(entry.venue.code));
+  if (dryRun) {
+    return {
+      read: read.length,
+      added: 0,
+      wouldAdd: toAdd.length,
+      skipped: alreadyOnFile,
+      dryRun: true,
+    };
+  }
+
+  for (const entry of toAdd) {
+    // eslint-disable-next-line no-await-in-loop
+    await createVenue(entry.venue);
+  }
+
+  return {
+    read: read.length,
+    added: toAdd.length,
+    wouldAdd: 0,
+    skipped: alreadyOnFile,
+    dryRun: false,
+  };
+}
+
 module.exports = {
+  importVenues,
+  IMPORT_COLUMNS,
   diaryFor,
   createVenue,
   getVenue,

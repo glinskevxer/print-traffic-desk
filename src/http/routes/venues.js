@@ -100,6 +100,23 @@ function venueRoutes() {
     }),
   );
 
+  router.post(
+    '/import',
+    requireRole('admin'),
+    validate({
+      body: z.object({
+        csv: z.string().min(10).max(500000),
+        dryRun: z.boolean().default(false),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const result = await venueService.importVenues(req.valid.body.csv, {
+        dryRun: req.valid.body.dryRun,
+      });
+      res.status(result.added > 0 ? 201 : 200).json(result);
+    }),
+  );
+
   router.get(
     '/',
     validate({ query: listVenuesQuery }),

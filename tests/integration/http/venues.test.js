@@ -1,7 +1,7 @@
 'use strict';
 
 const request = require('supertest');
-const { buildTestApp } = require('../../helpers/app');
+const { buildTestApp, stubOperator } = require('../../helpers/app');
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { models } = require('../../../src/models');
 const {
@@ -284,5 +284,122 @@ describe('what a house has on', () => {
 
   it('needs both ends of the range', async () => {
     await request(app).get(`/venues/${venue.publicId}/diary?from=2025-07-01`).expect(400);
+  });
+});
+
+describe('taking a spreadsheet of houses', () => {
+  let app;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+  });
+
+  const HEADER =
+    'code,name,territory,city,timezone,line1,postcode,seats,currency,gauges,soundFormats,nitrateCertified\n';
+
+  const PRINCE =
+    'GB-LON-PRINCE,Prince Charles Cinema,GB,London,Europe/London,7 Leicester Place,WC2H 7BY,288,GBP,35mm|70mm,dolby-sr,no\n';
+  const GFT =
+    'GB-GLA-GFT,"Glasgow Film Theatre, Rose Street",GB,Glasgow,Europe/London,12 Rose Street,G3 6RB,404,GBP,35mm|16mm,optical-mono,no\n';
+
+  function post(csv, dryRun = false) {
+    return request(app).post('/venues/import').send({ csv, dryRun });
+  }
+
+  it('puts every row on file', async () => {
+    const res = await post(HEADER + PRINCE + GFT).expect(201);
+
+    expect(res.body).toMatchObject({ read: 2, added: 2, skipped: [] });
+    expect(await models().Venue.countDocuments()).toBe(2);
+  });
+
+  it('reads a quoted name with a comma in it', async () => {
+    await post(HEADER + GFT).expect(201);
+
+    const venue = await models().Venue.findOne({ code: 'GB-GLA-GFT' });
+    expect(venue.name).toBe('Glasgow Film Theatre, Rose Street');
+    expect(venue.booth.gauges).toEqual(['35mm', '16mm']);
+  });
+
+  it('skips a house that is already on file', async () => {
+    await post(HEADER + PRINCE).expect(201);
+
+    const res = await post(HEADER + PRINCE + GFT).expect(201);
+
+    expect(res.body).toMatchObject({ read: 2, added: 1, skipped: ['GB-LON-PRINCE'] });
+  });
+
+  it('changes nothing on a dry run', async () => {
+    const res = await post(HEADER + PRINCE + GFT, true).expect(200);
+
+    expect(res.body).toMatchObject({ read: 2, added: 0, wouldAdd: 2, dryRun: true });
+    expect(await models().Venue.countDocuments()).toBe(0);
+  });
+
+  it('refuses a file missing a column the desk needs', async () => {
+    const res = await post('code,name\nGB-LON-X,Somewhere\n').expect(422);
+
+    expect(res.body.error.details.missing).toEqual(
+      expect.arrayContaining(['territory', 'city', 'line1', 'postcode', 'seats']),
+    );
+  });
+
+  it('names the line of every row it cannot read, and writes none of them', async () => {
+    const broken = HEADER + PRINCE + 'GB-GLA-GFT,,GB,Glasgow,,12 Rose Street,G3 6RB,notanumber\n';
+
+    const res = await post(broken).expect(422);
+
+    expect(res.body.error.details.rows[0].line).toBe(3);
+    expect(res.body.error.details.rows[0].problems).toEqual(
+      expect.arrayContaining(['name is missing', 'seats is not a number']),
+    );
+    expect(await models().Venue.countDocuments()).toBe(0);
+  });
+
+  it('refuses a file with the same house twice', async () => {
+    const res = await post(HEADER + PRINCE + PRINCE).expect(422);
+
+    expect(JSON.stringify(res.body.error.details.rows)).toMatch(/GB-LON-PRINCE appears twice/);
+  });
+
+  it('fills in the defaults a spreadsheet leaves out', async () => {
+    const minimal =
+      'code,name,territory,city,line1,postcode,seats\nGB-LON-ICA,ICA,GB,London,The Mall,SW1Y 5AH,185\n';
+
+    await post(minimal).expect(201);
+
+    const venue = await models().Venue.findOne({ code: 'GB-LON-ICA' });
+    expect(venue.timezone).toBe('Europe/London');
+    expect(venue.boxOfficeCurrency).toBe('GBP');
+    expect(venue.booth.gauges).toEqual(['35mm']);
+    expect(venue.inboundLeadDays).toBe(2);
+  });
+
+  it('reads a nitrate certificate written as yes', async () => {
+    const nitrate = HEADER + PRINCE.replace(',dolby-sr,no', ',dolby-sr,yes');
+
+    await post(nitrate).expect(201);
+
+    expect((await models().Venue.findOne({ code: 'GB-LON-PRINCE' })).booth.nitrateCertified).toBe(
+      true,
+    );
+  });
+
+  it('only an admin imports houses', async () => {
+    const { app: programmer } = buildTestApp({ operator: stubOperator({ role: 'programmer' }) });
+
+    await request(programmer)
+      .post('/venues/import')
+      .send({ csv: HEADER + PRINCE })
+      .expect(403);
   });
 });

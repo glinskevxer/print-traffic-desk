@@ -467,6 +467,14 @@ const OPERATIONS = Object.freeze([
     answers: 'Venue',
   },
   {
+    method: 'post',
+    path: '/venues/import',
+    tag: 'catalogue',
+    summary: 'take the spreadsheet of houses an archive already keeps',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
     method: 'get',
     path: '/venues/{venueId}',
     tag: 'catalogue',
