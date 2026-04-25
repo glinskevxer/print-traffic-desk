@@ -22,6 +22,7 @@ const COMMANDS = [
   require('./commands/expireWindows'),
   require('./commands/chaseTraffic'),
   require('./commands/buildStatements'),
+  require('./commands/routes'),
   require('./commands/report'),
   require('./commands/quarantineOverdue'),
   require('./commands/outbox'),
@@ -72,8 +73,14 @@ async function run(argv, { out = console.log, err = console.error } = {}) {
   }
 
   const cfg = config();
-  const connection = await connect(cfg.mongo, log);
-  registerModels(connection);
+
+  // Not every command talks to the database. Connecting anyway meant `routes`
+  // could not be run on a machine that had no mongo, which is exactly the
+  // machine somebody is on when they want to know what a build answers.
+  const needsDatabase = command.needsDatabase !== false;
+  if (needsDatabase) {
+    registerModels(await connect(cfg.mongo, log));
+  }
 
   try {
     const result = await runWithContext(
@@ -90,7 +97,7 @@ async function run(argv, { out = console.log, err = console.error } = {}) {
     log.error({ err: runError }, 'command failed');
     return 70;
   } finally {
-    await disconnect();
+    if (needsDatabase) await disconnect();
   }
 }
 

@@ -284,3 +284,38 @@ describe('the commands that report and change things', () => {
     expect(lines.join('\n')).toContain('printdesk expire-windows:');
   });
 });
+
+describe('commands that need nothing but the code', () => {
+  it('lists what this build answers without a database', async () => {
+    process.env.MONGO_URI = 'mongodb://127.0.0.1:1/nowhere';
+    resetConfigForTests();
+    const { lines, out, err } = collector();
+
+    expect(await run(['routes', '--grep', '/bookings'], { out, err })).toBe(0);
+    expect(lines.join('\n')).toContain('POST');
+    expect(lines.join('\n')).toContain('/bookings/runs');
+    expect(lines.join('\n')).toMatch(/\d+ routes, \d+ guarded routers/);
+  });
+
+  it('lists only the open routes when asked', async () => {
+    process.env.MONGO_URI = 'mongodb://127.0.0.1:1/nowhere';
+    resetConfigForTests();
+    const { lines, out, err } = collector();
+
+    await run(['routes', '--open'], { out, err });
+
+    const text = lines.join('\n');
+    expect(text).toContain('/health/live');
+    expect(text).not.toContain('/bookings');
+  });
+
+  it('says what each route does, from the same table the description uses', async () => {
+    process.env.MONGO_URI = 'mongodb://127.0.0.1:1/nowhere';
+    resetConfigForTests();
+    const { lines, out, err } = collector();
+
+    await run(['routes', '--grep', '/clearance'], { out, err });
+
+    expect(lines.join('\n')).toContain('could this house show this title on this date');
+  });
+});
