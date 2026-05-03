@@ -651,6 +651,14 @@ async function awaitingBoxOffice(asOfLocalDate) {
   }).sort({ localDate: 1 });
 }
 
+/**
+ * A page of bookings drags what nobody reads: nine clearance outcomes per row
+ * and the whole traffic plan. A diary of two hundred nights was answering with
+ * two thousand rule outcomes, so the list leaves them out and the single
+ * booking endpoint still has them.
+ */
+const BOOKING_LIST_PROJECTION = '-clearance.outcomes -notes';
+
 async function listBookings(query = {}) {
   const { Booking, Title, Venue, PrintElement } = models();
   const filter = {};
@@ -671,7 +679,12 @@ async function listBookings(query = {}) {
   if (query.from) filter.localDate = { ...(filter.localDate || {}), $gte: query.from };
   if (query.to) filter.localDate = { ...(filter.localDate || {}), $lte: query.to };
 
-  return listWith(Booking, { filter, query, sortField: 'screeningAt' });
+  return listWith(Booking, {
+    filter,
+    query,
+    sortField: 'screeningAt',
+    projection: BOOKING_LIST_PROJECTION,
+  });
 }
 
 /**
@@ -855,6 +868,7 @@ async function requestRun(input) {
 }
 
 module.exports = {
+  BOOKING_LIST_PROJECTION,
   DEFAULT_HOLD_MINUTES,
   requestBooking,
   requestRun,

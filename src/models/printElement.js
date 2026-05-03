@@ -115,7 +115,7 @@ printElementSchema.methods.isCirculating = function isCirculating() {
 };
 
 printElementSchema.methods.hasRestriction = function hasRestriction(restriction) {
-  return this.handlingRestrictions.includes(restriction);
+  return (this.handlingRestrictions || []).includes(restriction);
 };
 
 module.exports = {

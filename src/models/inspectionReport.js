@@ -78,8 +78,10 @@ inspectionReportSchema.index({ element: 1, inspectedAt: -1 });
 inspectionReportSchema.index({ 'assessment.verdict': 1, inspectedAt: -1 });
 inspectionReportSchema.index({ inspector: 1, inspectedAt: -1 });
 
+// A listing projects the findings away, and a virtual that assumes they are
+// there turns a page of reports into a 500.
 inspectionReportSchema.virtual('severeFindings').get(function severeFindings() {
-  return this.findings.filter((finding) => finding.severity === 'severe');
+  return (this.findings || []).filter((finding) => finding.severity === 'severe');
 });
 
 inspectionReportSchema.methods.isQuarantine = function isQuarantine() {

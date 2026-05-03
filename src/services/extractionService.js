@@ -326,10 +326,13 @@ async function listJobs(query = {}) {
   if (query.status) filter.status = query.status;
   if (query.needsHumanReview !== undefined) filter.needsHumanReview = query.needsHumanReview;
 
+  // The result is the whole extracted licence or the whole set of findings.
+  // A review queue lists thirty of them and reads one.
   return listWith(ExtractionJob, {
     filter,
     query: { order: 'desc', ...query },
     sortField: 'createdAt',
+    projection: '-result -attempts',
   });
 }
 

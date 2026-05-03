@@ -52,6 +52,12 @@ async function catalogueElement(input) {
   );
 }
 
+/**
+ * Provenance is free text and runs to pages on an archive print. A shelf
+ * listing does not want it and the single element endpoint does.
+ */
+const ELEMENT_LIST_PROJECTION = '-provenance';
+
 async function listElements(query = {}) {
   const { PrintElement, Title, Venue } = models();
   const filter = {};
@@ -72,7 +78,12 @@ async function listElements(query = {}) {
     Object.assign(filter, PrintElement.dueForInspectionFilter());
   }
 
-  return listWith(PrintElement, { filter, query, sortField: 'barcode' });
+  return listWith(PrintElement, {
+    filter,
+    query,
+    sortField: 'barcode',
+    projection: ELEMENT_LIST_PROJECTION,
+  });
 }
 
 /**
@@ -297,6 +308,7 @@ async function transferCustody(publicId, { custodianId, ownerId, reason, effecti
 }
 
 module.exports = {
+  ELEMENT_LIST_PROJECTION,
   transferCustody,
   provenanceOf,
   getElement,

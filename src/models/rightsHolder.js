@@ -60,7 +60,8 @@ rightsHolderSchema.index({ name: 1 }, { unique: true, collation: { locale: 'en',
 rightsHolderSchema.index({ kind: 1, active: 1 });
 
 rightsHolderSchema.methods.contactFor = function contactFor(role) {
-  return this.contacts.find((contact) => contact.role === role) || this.contacts[0] || null;
+  const contacts = this.contacts || [];
+  return contacts.find((contact) => contact.role === role) || contacts[0] || null;
 };
 
 module.exports = { name: 'RightsHolder', schema: rightsHolderSchema, collection: 'rights_holders' };

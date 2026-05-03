@@ -143,6 +143,13 @@ async function getInspection(publicId) {
   return report;
 }
 
+/**
+ * A report carries every finding on the print and the reasons the grader gave.
+ * A history listing wants the verdict and the date; the report endpoint has
+ * the rest.
+ */
+const INSPECTION_LIST_PROJECTION = '-findings -assessment.reasons -notes';
+
 async function listInspections(query = {}) {
   const { InspectionReport, PrintElement } = models();
   const filter = {};
@@ -159,6 +166,7 @@ async function listInspections(query = {}) {
     filter,
     query: { order: 'desc', ...query },
     sortField: 'inspectedAt',
+    projection: INSPECTION_LIST_PROJECTION,
   });
 }
 
@@ -262,6 +270,7 @@ async function quarantineOverdue({ limit = 50, now = new Date() } = {}) {
 }
 
 module.exports = {
+  INSPECTION_LIST_PROJECTION,
   quarantineOverdue,
   OVERDUE_MULTIPLE,
   previewInspection,

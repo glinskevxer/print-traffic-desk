@@ -72,8 +72,12 @@ titleSchema.index({ rightsHolder: 1, status: 1 });
 titleSchema.index({ title: 'text', originalTitle: 'text' });
 titleSchema.index({ mergedInto: 1 }, { sparse: true });
 
+// Virtuals run on a projected document too, where the field they read may not
+// have been fetched, so they never assume it is there.
 titleSchema.virtual('directors').get(function directors() {
-  return this.credits.filter((credit) => credit.role === 'director').map((credit) => credit.name);
+  return (this.credits || [])
+    .filter((credit) => credit.role === 'director')
+    .map((credit) => credit.name);
 });
 
 titleSchema.virtual('displayTitle').get(function displayTitle() {
