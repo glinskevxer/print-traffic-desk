@@ -109,6 +109,40 @@ function extractionRoutes() {
   );
 
   router.get(
+    '/queue',
+    asyncHandler(async (_req, res) => {
+      res.json(await service.queueSummary());
+    }),
+  );
+
+  router.post(
+    '/review',
+    requireRole('admin'),
+    validate({
+      body: z.object({
+        reviewedBy: z.string().min(3).max(160),
+        decisions: z
+          .array(
+            z.object({
+              jobId: publicId('exj'),
+              decision: z.enum(['apply', 'reject']),
+              reason: z.string().min(3).max(400).optional(),
+              inspector: z.string().min(2).max(120).optional(),
+            }),
+          )
+          .min(1)
+          .max(50),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const result = await service.reviewBatch(req.valid.body.decisions, {
+        reviewedBy: req.valid.body.reviewedBy,
+      });
+      res.status(result.failed > 0 ? 207 : 200).json(result);
+    }),
+  );
+
+  router.get(
     '/:jobId',
     validate({ params: jobParams }),
     asyncHandler(async (req, res) => {

@@ -1,7 +1,7 @@
 'use strict';
 
 const request = require('supertest');
-const { buildTestApp } = require('../../helpers/app');
+const { buildTestApp, stubOperator } = require('../../helpers/app');
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { fakeClient, LICENCE_ANSWER, NOTE_ANSWER } = require('../../helpers/fakeOpenAi');
 const {
@@ -189,5 +189,171 @@ describe('extraction endpoints', () => {
       .expect(422);
 
     expect(res.body.error.message).toMatch(/switched off/);
+  });
+});
+
+describe('working through the review queue', () => {
+  let app;
+  let title;
+  let element;
+  let client;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+    service.useClient(null);
+    resetConfigForTests();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    process.env.EXTRACTION_ENABLED = 'true';
+    process.env.OPENAI_API_KEY = 'sk-test-0000000000000000000';
+    resetConfigForTests();
+
+    const holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id });
+    const vault = await makeVenue({ code: 'GB-BER-VAULT' });
+    element = await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+    });
+
+    client = fakeClient();
+    service.useClient(client);
+  });
+
+  async function readLetter(text) {
+    client.answerWith(LICENCE_ANSWER);
+    const res = await request(app)
+      .post('/extractions/licence-letters')
+      .send({ titleId: title.publicId, contractText: text })
+      .expect(201);
+    return res.body.id;
+  }
+
+  it('says what is waiting, by kind', async () => {
+    await readLetter(`${LETTER} one`);
+    client.answerWith({ ...NOTE_ANSWER, confidence: 0.2 });
+    await request(app)
+      .post('/extractions/bench-notes')
+      .send({ elementId: element.publicId, noteText: 'r2 sprockets chewed at 340ft' })
+      .expect(201);
+
+    const res = await request(app).get('/extractions/queue').expect(200);
+
+    expect(res.body.waiting).toBe(1);
+    expect(res.body.readyToApply).toBe(1);
+    expect(res.body.byKind['licence-terms'].succeeded).toBe(1);
+  });
+
+  it('applies several readings in one call', async () => {
+    const first = await readLetter(`${LETTER} first`);
+    const second = await readLetter(`${LETTER} second`);
+
+    const res = await request(app)
+      .post('/extractions/review')
+      .send({
+        reviewedBy: 'rights@archive.test',
+        decisions: [
+          { jobId: first, decision: 'apply' },
+          { jobId: second, decision: 'apply' },
+        ],
+      })
+      .expect(200);
+
+    expect(res.body).toMatchObject({ reviewed: 2, applied: 2, rejected: 0, failed: 0 });
+    expect(res.body.outcomes[0].created).toMatch(/^rw_/);
+  });
+
+  it('rejects and applies in the same call', async () => {
+    const first = await readLetter(`${LETTER} first`);
+    const second = await readLetter(`${LETTER} second`);
+
+    const res = await request(app)
+      .post('/extractions/review')
+      .send({
+        reviewedBy: 'rights@archive.test',
+        decisions: [
+          { jobId: first, decision: 'apply' },
+          { jobId: second, decision: 'reject', reason: 'the draft letter, not the executed one' },
+        ],
+      })
+      .expect(200);
+
+    expect(res.body).toMatchObject({ applied: 1, rejected: 1, failed: 0 });
+  });
+
+  it('carries on past a decision that fails and says which one it was', async () => {
+    const good = await readLetter(`${LETTER} good`);
+    const alreadyDone = await readLetter(`${LETTER} done`);
+    await request(app)
+      .put(`/extractions/${alreadyDone}/apply`)
+      .send({ reviewedBy: 'rights@archive.test' })
+      .expect(200);
+
+    const res = await request(app)
+      .post('/extractions/review')
+      .send({
+        reviewedBy: 'rights@archive.test',
+        decisions: [
+          { jobId: alreadyDone, decision: 'apply' },
+          { jobId: good, decision: 'apply' },
+        ],
+      })
+      .expect(207);
+
+    expect(res.body).toMatchObject({ applied: 1, failed: 1 });
+    expect(res.body.outcomes[0]).toMatchObject({ jobId: alreadyDone, decision: 'failed' });
+    expect(res.body.outcomes[0].detail).toMatch(/already been applied/);
+  });
+
+  it('refuses a rejection with no reason, and leaves the rest alone', async () => {
+    const first = await readLetter(`${LETTER} first`);
+    const second = await readLetter(`${LETTER} second`);
+
+    const res = await request(app)
+      .post('/extractions/review')
+      .send({
+        reviewedBy: 'rights@archive.test',
+        decisions: [
+          { jobId: first, decision: 'reject' },
+          { jobId: second, decision: 'apply' },
+        ],
+      })
+      .expect(207);
+
+    expect(res.body).toMatchObject({ applied: 1, failed: 1 });
+  });
+
+  it('refuses a batch bigger than a sitting', async () => {
+    await request(app)
+      .post('/extractions/review')
+      .send({
+        reviewedBy: 'rights@archive.test',
+        decisions: Array.from({ length: 51 }, () => ({
+          jobId: 'exj_0000000000000000',
+          decision: 'apply',
+        })),
+      })
+      .expect(400);
+  });
+
+  it('only an admin works the queue', async () => {
+    const { app: programmer } = buildTestApp({ operator: stubOperator({ role: 'programmer' }) });
+
+    await request(programmer)
+      .post('/extractions/review')
+      .send({
+        reviewedBy: 'a@b.test',
+        decisions: [{ jobId: 'exj_0000000000000000', decision: 'apply' }],
+      })
+      .expect(403);
   });
 });

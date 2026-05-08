@@ -972,6 +972,22 @@ const OPERATIONS = Object.freeze([
   },
   {
     method: 'get',
+    path: '/extractions/queue',
+    tag: 'extraction',
+    summary: 'what is waiting to be looked at, by kind',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'post',
+    path: '/extractions/review',
+    tag: 'extraction',
+    summary: 'accept or reject several readings in one sitting',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
     path: '/extractions/spend',
     tag: 'extraction',
     summary: 'what extraction has cost over a period',

@@ -336,7 +336,97 @@ async function listJobs(query = {}) {
   });
 }
 
+/**
+ * A reviewer works through the queue in one sitting and wants one call, not
+ * thirty. Each decision stands on its own: one that fails does not stop the
+ * rest, because the alternative is a reviewer who has accepted twelve of
+ * thirteen readings and has no idea which twelve.
+ */
+async function reviewBatch(decisions, { reviewedBy }) {
+  const outcomes = [];
+
+  for (const decision of decisions) {
+    try {
+      if (decision.decision === 'reject') {
+        // eslint-disable-next-line no-await-in-loop
+        const job = await rejectExtraction(decision.jobId, {
+          reviewedBy,
+          reason: decision.reason,
+        });
+        outcomes.push({ jobId: decision.jobId, decision: 'rejected', status: job.status });
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      const job = await getJob(decision.jobId);
+      if (job.kind === 'licence-terms') {
+        // eslint-disable-next-line no-await-in-loop
+        const applied = await applyLicenceExtraction(decision.jobId, { reviewedBy });
+        outcomes.push({
+          jobId: decision.jobId,
+          decision: 'applied',
+          created: applied.window.publicId,
+        });
+      } else {
+        // eslint-disable-next-line no-await-in-loop
+        const applied = await applyInspectionExtraction(decision.jobId, {
+          reviewedBy,
+          inspector: decision.inspector || reviewedBy,
+        });
+        outcomes.push({
+          jobId: decision.jobId,
+          decision: 'applied',
+          created: applied.report.publicId,
+        });
+      }
+    } catch (err) {
+      outcomes.push({
+        jobId: decision.jobId,
+        decision: 'failed',
+        code: err.code || 'internal_error',
+        detail: err.message,
+      });
+    }
+  }
+
+  return {
+    reviewed: outcomes.length,
+    applied: outcomes.filter((each) => each.decision === 'applied').length,
+    rejected: outcomes.filter((each) => each.decision === 'rejected').length,
+    failed: outcomes.filter((each) => each.decision === 'failed').length,
+    outcomes,
+  };
+}
+
+/** What is waiting, by kind and by whether a person has to look at it. */
+async function queueSummary() {
+  const { ExtractionJob } = models();
+
+  const rows = await ExtractionJob.aggregate([
+    { $group: { _id: { kind: '$kind', status: '$status' }, count: { $sum: 1 } } },
+  ]);
+
+  const waiting = await ExtractionJob.countDocuments({
+    status: 'succeeded',
+    needsHumanReview: true,
+  });
+  const readyToApply = await ExtractionJob.countDocuments({
+    status: 'succeeded',
+    needsHumanReview: false,
+  });
+
+  const byKind = {};
+  for (const row of rows) {
+    byKind[row._id.kind] = byKind[row._id.kind] || {};
+    byKind[row._id.kind][row._id.status] = row.count;
+  }
+
+  return { waiting, readyToApply, byKind };
+}
+
 module.exports = {
+  reviewBatch,
+  queueSummary,
   useClient,
   extractionClient,
   previewOf,
