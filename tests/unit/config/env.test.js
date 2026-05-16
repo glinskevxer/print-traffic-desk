@@ -105,3 +105,41 @@ describe('extraction settings', () => {
     ).toBe(1000);
   });
 });
+
+describe('outbox settings', () => {
+  const base = { MONGO_URI: 'mongodb://127.0.0.1:27017/printdesk-test' };
+
+  it('sends to the log when no endpoint is configured', () => {
+    const cfg = parseEnv(base);
+
+    expect(cfg.outbox.webhookUrl).toBeNull();
+    expect(cfg.outbox.webhookSecret).toBeNull();
+  });
+
+  it('will not post despatch notes to an endpoint that cannot check them', () => {
+    expect(() =>
+      parseEnv({ ...base, OUTBOX_WEBHOOK_URL: 'https://office.archive.test/hooks' }),
+    ).toThrow(/OUTBOX_WEBHOOK_SECRET/);
+  });
+
+  it('takes an endpoint with a secret', () => {
+    const cfg = parseEnv({
+      ...base,
+      OUTBOX_WEBHOOK_URL: 'https://office.archive.test/hooks',
+      OUTBOX_WEBHOOK_SECRET: 'a-webhook-secret-that-is-long-enough',
+    });
+
+    expect(cfg.outbox.webhookUrl).toBe('https://office.archive.test/hooks');
+    expect(cfg.outbox.webhookSecret).toBe('a-webhook-secret-that-is-long-enough');
+  });
+
+  it('refuses a secret short enough to guess', () => {
+    expect(() =>
+      parseEnv({
+        ...base,
+        OUTBOX_WEBHOOK_URL: 'https://office.archive.test/hooks',
+        OUTBOX_WEBHOOK_SECRET: 'short',
+      }),
+    ).toThrow(/OUTBOX_WEBHOOK_SECRET/);
+  });
+});

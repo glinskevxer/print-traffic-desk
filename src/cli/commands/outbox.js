@@ -13,7 +13,7 @@ module.exports = {
     status: { type: 'string', describe: 'only messages in this state' },
     requeue: { type: 'string', describe: 'put one abandoned message back' },
   },
-  async run({ options, out, log }) {
+  async run({ options, out, log, cfg }) {
     if (options.requeue) {
       const message = await outbox.requeue(options.requeue);
       out(message ? `${message.publicId} is queued again` : `no message ${options.requeue}`);
@@ -33,7 +33,12 @@ module.exports = {
       return 0;
     }
 
-    const results = await drain({ limit: options.limit, log, webhookUrl: options.webhook });
+    const results = await drain({
+      limit: options.limit,
+      log,
+      webhookUrl: options.webhook || cfg.outbox.webhookUrl,
+      webhookSecret: cfg.outbox.webhookSecret,
+    });
     out(`claimed ${results.claimed}, sent ${results.sent}, failed ${results.failed}`);
     return 0;
   },
