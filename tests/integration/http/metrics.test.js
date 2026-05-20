@@ -4,7 +4,15 @@ const request = require('supertest');
 const { buildTestApp } = require('../../helpers/app');
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { registry } = require('../../../src/lib/metrics');
-const { makePrintElement, makeTitle } = require('../../helpers/factories');
+const {
+  makePrintElement,
+  makeTitle,
+  makeVenue,
+  makeRightsHolder,
+  makeRightsWindow,
+} = require('../../helpers/factories');
+const { models } = require('../../../src/models');
+const bookings = require('../../../src/services/bookingService');
 
 describe('what the desk exports to be scraped', () => {
   let app;
@@ -75,5 +83,99 @@ describe('what the desk exports to be scraped', () => {
     const { app: unauthenticated } = buildTestApp({ operator: null });
 
     await request(unauthenticated).get('/metrics').expect(200);
+  });
+});
+
+describe('the booking funnel', () => {
+  let app;
+  let holder;
+  let title;
+  let venue;
+  let vault;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    registry.reset();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  async function shelve() {
+    return makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+  }
+
+  const ask = (overrides = {}) => ({
+    titleId: title.publicId,
+    venueId: venue.publicId,
+    localDate: '2025-06-20',
+    localTime: '19:30',
+    exhibitionType: 'repertory',
+    today: '2025-05-15',
+    ...overrides,
+  });
+
+  it('counts a hold and then a confirmation, by house', async () => {
+    await shelve();
+    const { booking } = await bookings.requestBooking(ask());
+    await bookings.confirmBooking(booking.publicId);
+
+    const res = await request(app).get('/metrics').expect(200);
+
+    expect(res.text).toContain('printdesk_bookings_held_total{venue="GB-LON-PRINCE"} 1');
+    expect(res.text).toContain('printdesk_bookings_confirmed_total{venue="GB-LON-PRINCE"} 1');
+  });
+
+  it('counts a refusal against the rule that refused it', async () => {
+    await shelve();
+    await models().RightsWindow.updateMany({}, { $set: { territory: 'FR' } });
+
+    await bookings.requestBooking(ask()).catch(() => {});
+
+    const res = await request(app).get('/metrics').expect(200);
+    expect(res.text).toContain('printdesk_bookings_refused_total{rule="territory"} 1');
+  });
+
+  it('counts a refusal for having no print anybody can run', async () => {
+    await bookings.requestBooking(ask()).catch(() => {});
+
+    const res = await request(app).get('/metrics').expect(200);
+    expect(res.text).toContain('printdesk_bookings_refused_total{rule="no-print"} 1');
+  });
+
+  it('counts a hold that lapsed', async () => {
+    await shelve();
+    const { booking } = await bookings.requestBooking(ask());
+    booking.holdExpiresAt = new Date(Date.now() - 1000);
+    await booking.save();
+
+    await bookings.lapseExpiredHolds();
+
+    const res = await request(app).get('/metrics').expect(200);
+    expect(res.text).toContain('printdesk_bookings_lapsed_total 1');
+  });
+
+  it('exports the counters even before anything has happened', async () => {
+    const res = await request(app).get('/metrics').expect(200);
+
+    expect(res.text).toContain('# TYPE printdesk_bookings_held_total counter');
+    expect(res.text).toContain('# TYPE printdesk_extraction_tokens_total counter');
   });
 });

@@ -8,6 +8,7 @@ const audit = require('../lib/audit');
 const { config } = require('../config/env');
 const { createClient } = require('../ai/client');
 const { costOf } = require('../ai/pricing');
+const { countExtractionTokens } = require('../lib/metrics');
 const licence = require('../ai/extractLicenceTerms');
 const notes = require('../ai/normaliseInspectionNotes');
 const rightsService = require('./rightsService');
@@ -129,6 +130,8 @@ async function runExtraction({ kind, subjectType, subject, text, requestedBy, re
     job.status = 'succeeded';
     job.attempts.push({ outcome: 'succeeded', elapsedMs: outcome.elapsedMs });
     await job.save();
+
+    countExtractionTokens(kind, job.totalTokens);
 
     await audit.record({
       action: `extraction.${kind}.succeeded`,

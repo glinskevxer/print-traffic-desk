@@ -146,7 +146,40 @@ function installDefaults(target = registry) {
     REQUEST_BUCKETS,
     'how long the desk took to answer',
   );
+  // The booking funnel. Holds taken, holds that lapsed, bookings confirmed and
+  // bookings refused, by the rule that refused them: the last one is the
+  // series worth a dashboard, because a rule that starts refusing everything
+  // is a licence somebody forgot to renew.
+  target.counter('printdesk_bookings_held_total', 'holds taken');
+  target.counter('printdesk_bookings_confirmed_total', 'holds turned into legs');
+  target.counter('printdesk_bookings_lapsed_total', 'holds nobody confirmed');
+  target.counter('printdesk_bookings_refused_total', 'booking requests refused, by rule');
+  target.counter('printdesk_extraction_tokens_total', 'tokens spent reading documents, by kind');
   return target;
 }
 
-module.exports = { Registry, registry, installDefaults, renderLabels, labelKey, REQUEST_BUCKETS };
+/**
+ * Records a booking outcome. Called from the service rather than the route,
+ * because the command line books prints too and a funnel that only counts
+ * http traffic is a funnel with a hole in it.
+ */
+function countBooking(outcome, labels = {}, target = registry) {
+  installDefaults(target);
+  target.increment(`printdesk_bookings_${outcome}_total`, labels);
+}
+
+function countExtractionTokens(kind, tokens, target = registry) {
+  installDefaults(target);
+  target.increment('printdesk_extraction_tokens_total', { kind }, tokens);
+}
+
+module.exports = {
+  Registry,
+  registry,
+  installDefaults,
+  countBooking,
+  countExtractionTokens,
+  renderLabels,
+  labelKey,
+  REQUEST_BUCKETS,
+};

@@ -8,6 +8,7 @@ const { RuleRefusedError } = require('../lib/errors');
 const { retryOnConflict, retryableConflict } = require('../lib/conflicts');
 const audit = require('../lib/audit');
 const outbox = require('../lib/outbox');
+const { countBooking } = require('../lib/metrics');
 const { bookingReference } = require('../lib/ids');
 const { instantOf, localDateOf, addDays } = require('../lib/dates');
 const { assertTransition } = require('../domain/elements/status');
@@ -126,6 +127,7 @@ async function requestBooking(input, { attempts = 3, sleep } = {}) {
           screeningsAtVenue: takenHere,
         });
         if (!decision.cleared) {
+          for (const code of decision.refusalCodes) countBooking('refused', { rule: code });
           throw new RuleRefusedError('no licence clears this screening', {
             refusalCodes: decision.refusalCodes,
             refusals: decision.details,
@@ -184,6 +186,7 @@ async function requestBooking(input, { attempts = 3, sleep } = {}) {
           [chosen] = runnable;
         }
         if (!chosen) {
+          countBooking('refused', { rule: 'no-print' });
           throw new RuleRefusedError('no print of this title can play at this house', {
             rejected: rejected.map((each) => ({
               element: each.element.publicId,
@@ -316,6 +319,7 @@ async function holdBooking({
     { session },
   );
 
+  countBooking('held', { venue: venue.code });
   return { booking, element, plan, decision };
 }
 
@@ -412,6 +416,7 @@ async function confirmBooking(publicId, { confirmedBy } = {}) {
       { session },
     );
 
+    countBooking('confirmed', { venue: venue.code });
     return { booking, shipments: legs };
   });
 }
@@ -522,6 +527,7 @@ async function lapseExpiredHolds(now = new Date()) {
         nextStatus: 'lapsed',
         reason: 'the hold ran out',
       });
+      countBooking('lapsed', {});
       lapsed.push(booking.publicId);
     });
   }
