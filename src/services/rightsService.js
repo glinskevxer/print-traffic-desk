@@ -230,7 +230,108 @@ async function clearScreeningAt({ titleId, venue, instant, exhibitionType, scree
   });
 }
 
+/**
+ * Copies a licence forward into a new period.
+ *
+ * Renewals are how most licences are written: the same territory, the same
+ * terms, a year later. Typing them again is where the mistakes come from, so
+ * the desk copies the old one and takes only the dates and whatever the
+ * renewal actually changed.
+ *
+ * The copy is a draft. A renewal that goes live on its own is a renewal
+ * nobody read.
+ */
+const RENEWABLE = Object.freeze([
+  'title',
+  'rightsHolder',
+  'territory',
+  'exhibitionTypes',
+  'maxScreenings',
+  'maxScreeningsPerVenue',
+  'blackouts',
+  'terms',
+]);
+
+async function renewWindow(publicId, { startsOn, endsOn, changes = {}, reference }) {
+  const { RightsWindow } = models();
+
+  return withTransaction(async (session) => {
+    const previous = await getWindow(publicId, session);
+
+    if (!['active', 'expired', 'suspended'].includes(previous.status)) {
+      throw new RuleRefusedError('a draft is not renewed, it is edited', {
+        window: publicId,
+        status: previous.status,
+      });
+    }
+    if (startsOn > endsOn) {
+      throw new RuleRefusedError('the renewal ends before it starts', { startsOn, endsOn });
+    }
+    if (startsOn <= previous.endsOn) {
+      throw new RuleRefusedError('a renewal starts after the licence it renews', {
+        renewalStartsOn: startsOn,
+        previousEndsOn: previous.endsOn,
+      });
+    }
+
+    const carried = {};
+    for (const field of RENEWABLE) {
+      carried[field] = previous.get(field);
+    }
+    // Blackouts are dated, so last year's are not this year's. They are
+    // dropped rather than shifted: a festival moves, and guessing when is
+    // worse than making somebody type it.
+    const blackoutsDropped = carried.blackouts.length;
+    carried.blackouts = [];
+
+    if (changes.terms) carried.terms = { ...carried.terms.toObject(), ...changes.terms };
+    if (changes.maxScreenings !== undefined) carried.maxScreenings = changes.maxScreenings;
+    if (changes.maxScreeningsPerVenue !== undefined) {
+      carried.maxScreeningsPerVenue = changes.maxScreeningsPerVenue;
+    }
+    if (changes.exhibitionTypes) carried.exhibitionTypes = changes.exhibitionTypes;
+
+    assertTermsComplete(carried.terms);
+
+    const [renewal] = await RightsWindow.create(
+      [
+        {
+          ...carried,
+          startsOn,
+          endsOn,
+          reference: reference || previous.reference,
+          status: 'draft',
+          screeningsUsed: 0,
+          exclusivity: { scope: previous.exclusivity.scope, heldBy: previous.exclusivity.heldBy },
+          notes: `renewed from ${previous.publicId}`,
+        },
+      ],
+      { session },
+    );
+
+    await audit.record(
+      {
+        action: 'rights-window.renewed',
+        subjectType: 'rights-window',
+        subjectId: renewal.publicId,
+        metadata: {
+          renewedFrom: previous.publicId,
+          startsOn,
+          endsOn,
+          blackoutsDropped,
+          termsChanged: Boolean(changes.terms),
+        },
+      },
+      { session },
+    );
+
+    return { renewal, previous, blackoutsDropped };
+  });
+}
+
 module.exports = {
+  renewWindow,
+  RENEWABLE,
   createWindow,
   getWindow,
   activateWindow,

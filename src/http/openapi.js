@@ -699,6 +699,14 @@ const OPERATIONS = Object.freeze([
     answers: 'RightsWindow',
   },
   {
+    method: 'post',
+    path: '/rights-windows/{windowId}/renew',
+    tag: 'rights',
+    summary: 'copy a licence forward into a new period as a draft',
+    access: 'auth',
+    answers: 'RightsWindow',
+  },
+  {
     method: 'put',
     path: '/rights-windows/{windowId}/activate',
     tag: 'rights',

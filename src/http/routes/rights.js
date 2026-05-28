@@ -127,6 +127,38 @@ function rightsRoutes() {
     }),
   );
 
+  router.post(
+    '/rights-windows/:windowId/renew',
+    requireRole('programmer'),
+    validate({
+      params: windowParams,
+      body: z.object({
+        startsOn: isoDate,
+        endsOn: isoDate,
+        reference: z.string().max(80).optional(),
+        changes: z
+          .object({
+            terms: termsSchema.partial().optional(),
+            maxScreenings: z.number().int().min(1).max(10000).nullable().optional(),
+            maxScreeningsPerVenue: z.number().int().min(1).max(1000).nullable().optional(),
+            exhibitionTypes: z.array(z.enum(EXHIBITION_TYPES)).min(1).max(5).optional(),
+          })
+          .default({}),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const { renewal, previous, blackoutsDropped } = await rightsService.renewWindow(
+        req.valid.params.windowId,
+        req.valid.body,
+      );
+      res.status(201).json({
+        ...renewal.toJSON(),
+        renewedFrom: previous.publicId,
+        blackoutsDropped,
+      });
+    }),
+  );
+
   router.put(
     '/rights-windows/:windowId/activate',
     requireRole('admin'),
