@@ -26,6 +26,7 @@ const COMMANDS = [
   require('./commands/report'),
   require('./commands/quarantineOverdue'),
   require('./commands/outbox'),
+  require('./commands/prune'),
 ];
 
 const BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));
