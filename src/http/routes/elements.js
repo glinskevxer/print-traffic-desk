@@ -16,6 +16,7 @@ const {
   PROJECTION_SPEEDS,
 } = require('../../domain/formats');
 const { STATUSES } = require('../../domain/elements/status');
+const { ALL_REASONS, DISPOSAL_METHODS } = require('../../domain/elements/retirement');
 const elementService = require('../../services/elementService');
 const venueService = require('../../services/venueService');
 
@@ -181,6 +182,34 @@ function elementRoutes() {
         req.valid.body.reason,
       );
       res.json(element.toJSON());
+    }),
+  );
+
+  router.post(
+    '/:elementId/retirement',
+    requireRole('archivist'),
+    validate({
+      params: elementParams,
+      body: z.object({
+        reason: z.enum(ALL_REASONS),
+        retiredOn: isoDate,
+        retiredBy: z.string().min(2).max(120).optional(),
+        disposal: z
+          .object({
+            method: z.enum(DISPOSAL_METHODS),
+            to: z.string().min(2).max(160).optional(),
+            witness: z.string().min(2).max(120),
+            notes: z.string().max(400).optional(),
+          })
+          .optional(),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const { element, line } = await elementService.retireElement(
+        req.valid.params.elementId,
+        req.valid.body,
+      );
+      res.json({ ...element.toJSON(), retirement: line });
     }),
   );
 

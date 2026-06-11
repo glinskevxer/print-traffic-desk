@@ -1,7 +1,7 @@
 'use strict';
 
 const request = require('supertest');
-const { buildTestApp } = require('../../helpers/app');
+const { buildTestApp, stubOperator } = require('../../helpers/app');
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const {
   makeTitle,
@@ -10,6 +10,7 @@ const {
   makePrintElement,
   makeRightsWindow,
 } = require('../../helpers/factories');
+const { models } = require('../../../src/models');
 const bookings = require('../../../src/services/bookingService');
 const inspections = require('../../../src/services/inspectionService');
 
@@ -496,5 +497,140 @@ describe('handing a print to a different keeper', () => {
 
     expect(res.body.items[0].action).toBe('element.custody-changed');
     expect(res.body.items[0].metadata.reason).toBe('the collection moved');
+  });
+});
+
+describe('retiring a print', () => {
+  let app;
+  let owner;
+  let title;
+  let vault;
+  let element;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    owner = await makeRightsHolder({ name: 'BFI National Archive', kind: 'archive' });
+    title = await makeTitle({ rightsHolder: owner._id });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    element = await makePrintElement({
+      title: title._id,
+      owner: owner._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+  });
+
+  function retire(body) {
+    return request(app).post(`/elements/${element.publicId}/retirement`).send(body);
+  }
+
+  it('retires a shrunken print with no disposal to record', async () => {
+    const res = await retire({ reason: 'shrunk-beyond-use', retiredOn: '2026-06-01' }).expect(200);
+
+    expect(res.body.status).toBe('retired');
+    expect(res.body.retirement).toBe('retired on 2026-06-01: shrunk-beyond-use');
+    expect(res.body.provenance).toMatch(/retired on 2026-06-01/);
+  });
+
+  it('insists on a disposal for a deaccession', async () => {
+    const res = await retire({ reason: 'deaccessioned', retiredOn: '2026-06-01' }).expect(422);
+
+    expect(res.body.error.details.problems).toContain(
+      'deaccessioned needs a disposal saying where the film went',
+    );
+  });
+
+  it('records where a deaccessioned print went', async () => {
+    const res = await retire({
+      reason: 'deaccessioned',
+      retiredOn: '2026-06-01',
+      disposal: { method: 'transferred', to: 'Cinemateket Oslo', witness: 'R. Fitzgerald' },
+      retiredBy: 'archivist@archive.test',
+    }).expect(200);
+
+    expect(res.body.retirement).toMatch(/transferred to Cinemateket Oslo/);
+    expect(res.body.retirement).toMatch(/witnessed by R. Fitzgerald/);
+  });
+
+  it('refuses a way of disposing nobody does', async () => {
+    const res = await retire({
+      reason: 'destroyed',
+      retiredOn: '2026-06-01',
+      disposal: { method: 'thrown in the canal', witness: 'A. Novak' },
+    }).expect(400);
+
+    expect(res.body.error.details.issues[0].key).toBe('disposal.method');
+  });
+
+  it('will not retire a print that is out', async () => {
+    element.status = 'on-loan';
+    await element.save();
+
+    const res = await retire({ reason: 'shrunk-beyond-use', retiredOn: '2026-06-01' }).expect(422);
+
+    expect(res.body.error.details.problems).toContain(
+      'that print is out, bring it home before retiring it',
+    );
+  });
+
+  it('will not retire a print with a leg still open', async () => {
+    const away = await makeVenue({ code: 'GB-GLA-GFT', city: 'Glasgow' });
+    await models().Shipment.create({
+      element: element._id,
+      fromVenue: vault._id,
+      toVenue: away._id,
+      leg: 'outbound',
+      service: 'road-freight',
+      plannedDispatchOn: '2026-06-01',
+      plannedArrivalOn: '2026-06-03',
+      status: 'planned',
+    });
+
+    const res = await retire({ reason: 'shrunk-beyond-use', retiredOn: '2026-06-01' }).expect(422);
+
+    expect(res.body.error.details.openLegs).toBe(1);
+  });
+
+  it('will not retire the same print twice', async () => {
+    await retire({ reason: 'shrunk-beyond-use', retiredOn: '2026-06-01' }).expect(200);
+
+    const res = await retire({ reason: 'destroyed', retiredOn: '2026-06-02' }).expect(422);
+    expect(res.body.error.details.problems).toContain('that print is already retired');
+  });
+
+  it('records the disposal in the audit trail', async () => {
+    await retire({
+      reason: 'destroyed',
+      retiredOn: '2026-06-01',
+      disposal: { method: 'incinerated', witness: 'A. Novak', notes: 'nitrate, decayed' },
+      retiredBy: 'archivist@archive.test',
+    }).expect(200);
+
+    const res = await request(app)
+      .get(`/audit-events/print-element/${element.publicId}`)
+      .expect(200);
+
+    expect(res.body.items[0].action).toBe('element.retired');
+    expect(res.body.items[0].metadata.disposal.method).toBe('incinerated');
+    expect(res.body.items[0].metadata.retiredBy).toBe('archivist@archive.test');
+  });
+
+  it('only an archivist retires a print', async () => {
+    const { app: viewer } = buildTestApp({ operator: stubOperator({ role: 'viewer' }) });
+
+    await request(viewer)
+      .post(`/elements/${element.publicId}/retirement`)
+      .send({ reason: 'shrunk-beyond-use', retiredOn: '2026-06-01' })
+      .expect(403);
   });
 });

@@ -6,6 +6,7 @@ const { listWith, guardDuplicates } = require('../db/listing');
 const { withTransaction } = require('../db/connection');
 const { NotFoundError, RuleRefusedError } = require('../lib/errors');
 const { assertTransition, isCommitted } = require('../domain/elements/status');
+const { assertRetirable, describeRetirement } = require('../domain/elements/retirement');
 const { boothCompatibility } = require('../domain/elements/compatibility');
 const audit = require('../lib/audit');
 
@@ -307,7 +308,56 @@ async function transferCustody(publicId, { custodianId, ownerId, reason, effecti
   });
 }
 
+/**
+ * Retires a print and writes down what happened to it.
+ *
+ * setStatus can move an element to retired too, and did until an archive was
+ * asked where four deaccessioned prints had gone and could only say that
+ * somebody had marked them retired in 2019. This is the way in now, and the
+ * status machine keeps the plain move for the cases with no film to dispose of.
+ */
+async function retireElement(publicId, { reason, retiredOn, disposal = null, retiredBy }) {
+  const { Shipment } = models();
+
+  return withTransaction(async (session) => {
+    const element = await getElement(publicId, session);
+    assertRetirable({ element, reason, disposal, retiredOn });
+
+    const openLegs = await Shipment.countDocuments(
+      { element: element._id, status: { $in: ['planned', 'collected', 'in-transit', 'delayed'] } },
+      { session },
+    );
+    if (openLegs > 0) {
+      throw new RuleRefusedError('that print still has a leg open, close it first', {
+        element: publicId,
+        openLegs,
+      });
+    }
+
+    const before = element.status;
+    const line = describeRetirement({ reason, disposal, retiredOn });
+
+    element.status = 'retired';
+    element.provenance = `${element.provenance ? `${element.provenance}\n` : ''}${line}`;
+    await element.save({ session });
+
+    await audit.record(
+      {
+        action: 'element.retired',
+        subjectType: 'print-element',
+        subjectId: element.publicId,
+        changes: [{ field: 'status', before, after: 'retired' }],
+        metadata: { reason, retiredOn, retiredBy: retiredBy || null, disposal },
+      },
+      { session },
+    );
+
+    return { element, line };
+  });
+}
+
 module.exports = {
+  retireElement,
   ELEMENT_LIST_PROJECTION,
   transferCustody,
   provenanceOf,

@@ -619,6 +619,14 @@ const OPERATIONS = Object.freeze([
     answers: 'object',
   },
   {
+    method: 'post',
+    path: '/elements/{elementId}/retirement',
+    tag: 'shelf',
+    summary: 'retire a print and record where the film went',
+    access: 'auth',
+    answers: 'PrintElement',
+  },
+  {
     method: 'get',
     path: '/elements/{elementId}/compatibility/{venueId}',
     tag: 'shelf',
