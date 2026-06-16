@@ -20,7 +20,8 @@
     "lint:fix": "eslint --fix src tests scripts",
     "format": "prettier --write src tests scripts",
     "format:check": "prettier --check src tests scripts",
-    "start:cluster": "node src/http/cluster.js"
+    "start:cluster": "node src/http/cluster.js",
+    "worker": "node src/workers/index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

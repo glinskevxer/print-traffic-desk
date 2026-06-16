@@ -74,6 +74,10 @@ clean: ## stop everything and throw the data away
 logs: ## follow the desk logs, read as prose rather than json
 	$(COMPOSE) logs -f desk | $(NODE_BIN)/pino-pretty
 
+.PHONY: worker
+worker: ## run the scheduled work against the local database
+	node src/workers/index.js
+
 .PHONY: migrate
 migrate: ## run the migrations against the local database
 	node src/cli/index.js migrate

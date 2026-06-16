@@ -39,6 +39,25 @@ services:
       - "4010:4010"
     restart: unless-stopped
 
+  # The scheduled work: lapsing holds, sending despatch notes, expiring
+  # licences. Same image, different command, so it cannot drift from the desk.
+  worker:
+    build:
+      context: .
+      target: runtime
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      MONGO_URI: mongodb://mongo:27017/printdesk?replicaSet=printdesk
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-a-development-secret-that-is-long-enough}
+      OUTBOX_WEBHOOK_URL: ${OUTBOX_WEBHOOK_URL:-}
+      OUTBOX_WEBHOOK_SECRET: ${OUTBOX_WEBHOOK_SECRET:-}
+    command: ["node", "src/workers/index.js"]
+    restart: unless-stopped
+
   # Runs once, then exits. Compose keeps it out of `up` unless asked for by
   # profile, so a normal start does not wait on it.
   migrate:
