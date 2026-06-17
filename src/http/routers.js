@@ -14,7 +14,7 @@ const { bookingRoutes } = require('./routes/bookings');
 const { royaltyRoutes } = require('./routes/royalties');
 const { extractionRoutes } = require('./routes/extraction');
 const { auditRoutes } = require('./routes/audit');
-const { reportRoutes } = require('./routes/reports');
+const { reportRoutes, searchRoutes } = require('./routes/reports');
 
 /**
  * What the desk mounts, and where.
@@ -44,6 +44,7 @@ const ROUTERS = Object.freeze([
   { path: '/extractions', open: false, build: () => extractionRoutes() },
   { path: '/audit-events', open: false, build: () => auditRoutes() },
   { path: '/reports', open: false, build: () => reportRoutes() },
+  { path: '/search', open: false, build: () => searchRoutes() },
 ]);
 
 function openRouters() {

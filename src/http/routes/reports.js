@@ -7,6 +7,7 @@ const { validate } = require('../middleware/validate');
 const { requireRole } = require('../middleware/auth');
 const { publicId, isoDate } = require('../schemas/common');
 const service = require('../../services/reportService');
+const searchService = require('../../services/searchService');
 
 function reportRoutes() {
   const router = Router();
@@ -88,4 +89,28 @@ function reportRoutes() {
   return router;
 }
 
-module.exports = { reportRoutes };
+/**
+ * Search sits on its own path rather than under reports, because it is the
+ * thing at the top of every screen and nobody thinks of it as a report.
+ */
+function searchRoutes() {
+  const router = Router();
+
+  router.get(
+    '/',
+    requireRole('viewer'),
+    validate({
+      query: z.object({
+        q: z.string().min(1).max(120),
+        limit: z.coerce.number().int().min(1).max(50).default(10),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      res.json(await searchService.search(req.valid.query.q, { limit: req.valid.query.limit }));
+    }),
+  );
+
+  return router;
+}
+
+module.exports = { reportRoutes, searchRoutes };

@@ -1052,6 +1052,14 @@ const OPERATIONS = Object.freeze([
   },
   {
     method: 'get',
+    path: '/search',
+    tag: 'catalogue',
+    summary: 'the box at the top of the screen, whatever was typed into it',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
     path: '/audit-events',
     tag: 'audit',
     summary: 'who changed what, across the desk',
