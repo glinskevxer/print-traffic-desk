@@ -158,3 +158,225 @@ describe('royalty statement endpoints', () => {
     await request(app).get('/royalty-statements/stmt_0000000000000000').expect(404);
   });
 });
+
+describe('correcting a statement that has gone out', () => {
+  let app;
+  let holder;
+  let title;
+  let venue;
+  let vault;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus', settlementDays: 30 });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable', slug: 'daisies' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE', seats: 288 });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    await makeRightsWindow({
+      title: title._id,
+      rightsHolder: holder._id,
+      terms: { kind: 'percentage', currency: 'GBP', percentageBps: 3500 },
+    });
+  });
+
+  async function settledScreening(localDate) {
+    await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+    const { booking } = await bookings.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate,
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-15',
+    });
+    await bookings.confirmBooking(booking.publicId);
+    await bookings.reportBoxOffice(booking.publicId, {
+      grossMinor: 184000,
+      currency: 'GBP',
+      admissions: 210,
+    });
+    await bookings.settleBooking(booking.publicId, '2025-07-01');
+    return booking;
+  }
+
+  async function issued() {
+    const created = await request(app)
+      .post('/royalty-statements')
+      .send({
+        rightsHolderId: holder.publicId,
+        periodStartsOn: '2025-06-01',
+        periodEndsOn: '2025-06-30',
+      })
+      .expect(201);
+    await request(app)
+      .put(`/royalty-statements/${created.body.id}/issue`)
+      .send({ issuedOn: '2025-07-05' })
+      .expect(200);
+    return created.body;
+  }
+
+  it('reverses every line into a credit note that adds up', async () => {
+    await settledScreening('2025-06-20');
+    await settledScreening('2025-06-21');
+    const statement = await issued();
+
+    const res = await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ reason: 'the licence was the wrong one', issuedOn: '2025-07-20' })
+      .expect(201);
+
+    expect(res.body.totalMinor).toBe(-128800);
+    expect(res.body.lines).toHaveLength(2);
+    expect(res.body.lines[0].basis).toMatch(/^credit: /);
+    expect(res.body.credits).toBe(statement.id);
+    expect(res.body.dueOn).toBe('2025-08-19');
+  });
+
+  it('leaves the statement it corrects exactly as it was', async () => {
+    await settledScreening('2025-06-20');
+    const statement = await issued();
+
+    await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ reason: 'wrong terms', issuedOn: '2025-07-20' })
+      .expect(201);
+
+    const reread = await request(app).get(`/royalty-statements/${statement.id}`).expect(200);
+    expect(reread.body.totalMinor).toBe(64400);
+    expect(reread.body.status).toBe('credited');
+    expect(reread.body.creditedBy).toBeTruthy();
+  });
+
+  it('credits only the lines it was asked to', async () => {
+    const first = await settledScreening('2025-06-20');
+    await settledScreening('2025-06-21');
+    const statement = await issued();
+
+    const res = await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({
+        reason: 'that night was cancelled and reported anyway',
+        issuedOn: '2025-07-20',
+        lines: [first.reference],
+      })
+      .expect(201);
+
+    expect(res.body.lines).toHaveLength(1);
+    expect(res.body.totalMinor).toBe(-64400);
+  });
+
+  it('refuses to credit lines that are not on the statement', async () => {
+    await settledScreening('2025-06-20');
+    const statement = await issued();
+
+    const res = await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ reason: 'wrong', issuedOn: '2025-07-20', lines: ['BK-2099-001-0000'] })
+      .expect(422);
+
+    expect(res.body.error.message).toMatch(/none of those bookings/);
+  });
+
+  it('refuses a credit note on a draft', async () => {
+    const created = await request(app)
+      .post('/royalty-statements')
+      .send({
+        rightsHolderId: holder.publicId,
+        periodStartsOn: '2025-06-01',
+        periodEndsOn: '2025-06-30',
+      })
+      .expect(201);
+
+    await request(app)
+      .post(`/royalty-statements/${created.body.id}/credit-note`)
+      .send({ reason: 'wrong', issuedOn: '2025-07-20' })
+      .expect(422);
+  });
+
+  it('refuses without a reason', async () => {
+    await settledScreening('2025-06-20');
+    const statement = await issued();
+
+    await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ issuedOn: '2025-07-20' })
+      .expect(400);
+  });
+
+  it('will not credit the same statement twice', async () => {
+    await settledScreening('2025-06-20');
+    const statement = await issued();
+    await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ reason: 'wrong', issuedOn: '2025-07-20' })
+      .expect(201);
+
+    await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ reason: 'wrong again', issuedOn: '2025-07-21' })
+      .expect(409);
+  });
+
+  it('will not credit a credit note', async () => {
+    await settledScreening('2025-06-20');
+    const statement = await issued();
+    const note = await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ reason: 'wrong', issuedOn: '2025-07-20' })
+      .expect(201);
+
+    await request(app)
+      .post(`/royalty-statements/${note.body.id}/credit-note`)
+      .send({ reason: 'and again', issuedOn: '2025-07-21' })
+      .expect(422);
+  });
+
+  it('lets the period be stated again once the first one is credited', async () => {
+    await settledScreening('2025-06-20');
+    const statement = await issued();
+    await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ reason: 'wrong terms', issuedOn: '2025-07-20' })
+      .expect(201);
+
+    await request(app)
+      .post('/royalty-statements')
+      .send({
+        rightsHolderId: holder.publicId,
+        periodStartsOn: '2025-06-01',
+        periodEndsOn: '2025-06-30',
+      })
+      .expect(201);
+  });
+
+  it('says what it reversed and why', async () => {
+    await settledScreening('2025-06-20');
+    const statement = await issued();
+    await request(app)
+      .post(`/royalty-statements/${statement.id}/credit-note`)
+      .send({ reason: 'the box office was restated', issuedOn: '2025-07-20' })
+      .expect(201);
+
+    const trail = await request(app)
+      .get(`/audit-events/royalty-statement/${statement.id}`)
+      .expect(200);
+
+    const credited = trail.body.items.find((event) => event.action === 'statement.credited');
+    expect(credited.metadata).toMatchObject({ reversedLines: 1, totalMinor: -64400 });
+  });
+});

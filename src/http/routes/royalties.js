@@ -104,6 +104,26 @@ function royaltyRoutes() {
     }),
   );
 
+  router.post(
+    '/:statementId/credit-note',
+    requireRole('admin'),
+    validate({
+      params: statementParams,
+      body: z.object({
+        reason: z.string().min(3).max(400),
+        issuedOn: isoDate,
+        lines: z.array(z.string().min(3).max(40)).max(500).optional(),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const { note, original } = await service.creditStatement(
+        req.valid.params.statementId,
+        req.valid.body,
+      );
+      res.status(201).json({ ...note.toJSON(), credits: original.publicId });
+    }),
+  );
+
   router.put(
     '/:statementId/payment',
     requireRole('admin'),

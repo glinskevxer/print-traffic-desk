@@ -68,8 +68,17 @@ async function buildStatement({ rightsHolderId, periodStartsOn, periodEndsOn }) 
   return withTransaction(async (session) => {
     const holder = await required(RightsHolder, rightsHolderId, { session });
 
+    // The live statuses, matching the unique index: a period that has been
+    // voided or credited can be stated again, and a credit note shares the
+    // period of the statement it corrects without blocking it.
     const existing = await RoyaltyStatement.findOne(
-      { rightsHolder: holder._id, periodStartsOn, periodEndsOn, status: { $ne: 'void' } },
+      {
+        rightsHolder: holder._id,
+        periodStartsOn,
+        periodEndsOn,
+        status: { $in: ['draft', 'issued', 'paid'] },
+        creditsStatement: null,
+      },
       null,
       { session },
     );
@@ -243,7 +252,114 @@ async function listStatements(query = {}) {
   return listWith(RoyaltyStatement, { filter, query, sortField: 'periodStartsOn' });
 }
 
+/**
+ * Corrects an issued statement without editing it.
+ *
+ * A distributor has the paper. Changing what a statement said after they have
+ * filed it is how a reconciliation takes a month, so the desk raises a credit
+ * note: a statement of its own, with the lines reversed, pointing at the one it
+ * corrects. Both stay, and both add up.
+ */
+async function creditStatement(publicId, { reason, issuedOn, lines = null }) {
+  const { RoyaltyStatement, RightsHolder } = models();
+
+  if (!reason) {
+    throw new RuleRefusedError('a credit note needs a reason', { statement: publicId });
+  }
+
+  return withTransaction(async (session) => {
+    const original = await loadStatement(publicId, session);
+
+    // The already credited check comes first: crediting moves the statement
+    // out of issued, so a second attempt would otherwise be told the status is
+    // wrong rather than that somebody has already done it.
+    if (original.creditedBy) {
+      throw new ConflictError('that statement has already been credited', {
+        statement: publicId,
+        creditNote: String(original.creditedBy),
+      });
+    }
+    if (!['issued', 'paid'].includes(original.status)) {
+      throw new RuleRefusedError('only an issued statement is corrected with a credit note', {
+        statement: publicId,
+        status: original.status,
+      });
+    }
+    if (original.isCreditNote()) {
+      throw new RuleRefusedError('a credit note is not itself credited', { statement: publicId });
+    }
+
+    const reversedFrom = lines
+      ? original.lines.filter((line) => lines.includes(line.reference))
+      : original.lines;
+    if (reversedFrom.length === 0) {
+      throw new RuleRefusedError('none of those bookings are on that statement', {
+        statement: publicId,
+        asked: lines,
+      });
+    }
+
+    const reversed = reversedFrom.map((line) => ({
+      booking: line.booking,
+      reference: line.reference,
+      titleSlug: line.titleSlug,
+      venueCode: line.venueCode,
+      localDate: line.localDate,
+      admissions: line.admissions,
+      grossMinor: line.grossMinor,
+      royaltyMinor: -line.royaltyMinor,
+      basis: `credit: ${line.basis}`,
+    }));
+
+    const holder = await RightsHolder.findById(original.rightsHolder, null, { session });
+    const [note] = await RoyaltyStatement.create(
+      [
+        {
+          rightsHolder: original.rightsHolder,
+          periodStartsOn: original.periodStartsOn,
+          periodEndsOn: original.periodEndsOn,
+          currency: original.currency,
+          lines: reversed,
+          totalMinor: reversed.reduce((sum, line) => sum + line.royaltyMinor, 0),
+          screeningCount: reversed.length,
+          admissionsTotal: reversed.reduce((sum, line) => sum + line.admissions, 0),
+          grossTotalMinor: reversed.reduce((sum, line) => sum + line.grossMinor, 0),
+          status: 'issued',
+          issuedOn,
+          dueOn: addDays(issuedOn, holder.settlementDays),
+          creditsStatement: original._id,
+          creditReason: reason,
+        },
+      ],
+      { session },
+    );
+
+    original.creditedBy = note._id;
+    original.status = 'credited';
+    await original.save({ session });
+
+    await audit.record(
+      {
+        action: 'statement.credited',
+        subjectType: 'royalty-statement',
+        subjectId: original.publicId,
+        changes: [{ field: 'status', before: 'issued', after: 'credited' }],
+        metadata: {
+          creditNote: note.publicId,
+          reason,
+          reversedLines: reversed.length,
+          totalMinor: note.totalMinor,
+        },
+      },
+      { session },
+    );
+
+    return { note, original };
+  });
+}
+
 module.exports = {
+  creditStatement,
   buildStatement,
   issueStatement,
   recordPayment,

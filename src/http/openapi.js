@@ -923,6 +923,14 @@ const OPERATIONS = Object.freeze([
     answers: 'RoyaltyStatement',
   },
   {
+    method: 'post',
+    path: '/royalty-statements/{statementId}/credit-note',
+    tag: 'money',
+    summary: 'correct an issued statement without editing what it said',
+    access: 'auth',
+    answers: 'RoyaltyStatement',
+  },
+  {
     method: 'put',
     path: '/royalty-statements/{statementId}/payment',
     tag: 'money',
