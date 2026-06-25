@@ -28,7 +28,7 @@ const { reportRoutes, searchRoutes } = require('./routes/reports');
 const ROUTERS = Object.freeze([
   { path: '/health', open: true, build: (context) => healthRoutes(context) },
   { path: '/metrics', open: true, build: () => metricsRoutes() },
-  { path: '/auth', open: true, build: () => authRoutes() },
+  { path: '/auth', open: true, build: (context) => authRoutes(context) },
 
   { path: '/titles', open: false, build: () => titleRoutes() },
   { path: '/venues', open: false, build: () => venueRoutes() },

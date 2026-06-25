@@ -10,16 +10,30 @@ const authService = require('../../services/authService');
  * request context so every audit line downstream is signed. Whether a route
  * needs an operator at all is decided by the route, not here.
  */
+const API_KEY_HEADER = 'x-api-key';
+
 function authenticate({ optional = false } = {}) {
   return async function readOperator(req, res, next) {
     const token = bearerFrom(req.get('authorization'));
+    const apiKey = req.get(API_KEY_HEADER);
 
-    if (!token) {
+    if (!token && !apiKey) {
       if (optional) return next();
-      return next(new NotAuthenticatedError('this desk needs an operator token'));
+      return next(new NotAuthenticatedError('this desk needs an operator token or an api key'));
     }
 
     try {
+      // A machine presents a key, a person presents a token. Both end up as an
+      // operator, so nothing downstream has to know which it was.
+      if (apiKey) {
+        const key = await authService.resolveApiKey(apiKey);
+        const operator = key.asOperator();
+        req.operator = operator;
+        req.apiKey = key;
+        req.log = req.log.child({ apiKey: key.publicId, role: key.role });
+        return withContext({ actor: operator.email, role: key.role }, () => next());
+      }
+
       const { claims, operator } = await authService.resolveToken(token);
       req.operator = operator;
       req.claims = claims;
@@ -96,4 +110,12 @@ function requireOwnVenue(pick) {
   };
 }
 
-module.exports = { authenticate, requireOperator, requireRole, requireOwnVenue, outranks, COVERS };
+module.exports = {
+  authenticate,
+  requireOperator,
+  requireRole,
+  requireOwnVenue,
+  outranks,
+  COVERS,
+  API_KEY_HEADER,
+};

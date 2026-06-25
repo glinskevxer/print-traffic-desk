@@ -19,6 +19,7 @@ const definitions = [
   require('./rateCounter'),
   require('./migration'),
   require('./outboxMessage'),
+  require('./apiKey'),
 ];
 
 const registered = new WeakMap();

@@ -30,8 +30,12 @@ describe('the description of the api', () => {
     expect(document.components.schemas.Booking.properties.status.enum).toEqual(BOOKING_STATUSES);
   });
 
-  it('needs an operator token by default and says which paths do not', () => {
-    expect(document.security).toEqual([{ operatorToken: [] }]);
+  it('needs an operator token or a machine key by default, and says which paths do not', () => {
+    expect(document.security).toEqual([{ operatorToken: [] }, { machineKey: [] }]);
+    expect(Object.keys(document.components.securitySchemes).sort()).toEqual([
+      'machineKey',
+      'operatorToken',
+    ]);
     expect(document.paths['/health/live'].get.security).toEqual([]);
     expect(document.paths['/auth/sign-in'].post.security).toEqual([]);
     expect(document.paths['/titles'].get.security).toBeUndefined();

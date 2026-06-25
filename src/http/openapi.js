@@ -395,6 +395,30 @@ const OPERATIONS = Object.freeze([
     answers: 'Operator',
   },
   {
+    method: 'post',
+    path: '/auth/api-keys',
+    tag: 'auth',
+    summary: 'mint a key for a machine, and show its secret once',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'get',
+    path: '/auth/api-keys',
+    tag: 'auth',
+    summary: 'the keys machines hold',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
+    method: 'delete',
+    path: '/auth/api-keys/{keyId}',
+    tag: 'auth',
+    summary: 'revoke a key a machine holds',
+    access: 'auth',
+    answers: 'object',
+  },
+  {
     method: 'get',
     path: '/titles',
     tag: 'catalogue',
@@ -1214,7 +1238,7 @@ function openapiDocument({ servers = [{ url: '/' }] } = {}) {
       ].join('\n'),
     },
     servers,
-    security: [{ operatorToken: [] }],
+    security: [{ operatorToken: [] }, { machineKey: [] }],
     tags: [
       { name: 'health', description: 'liveness and readiness' },
       { name: 'auth', description: 'operator sessions' },
@@ -1231,6 +1255,7 @@ function openapiDocument({ servers = [{ url: '/' }] } = {}) {
     components: {
       securitySchemes: {
         operatorToken: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        machineKey: { type: 'apiKey', in: 'header', name: 'x-api-key' },
       },
       schemas: schemas(),
     },

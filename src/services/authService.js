@@ -2,7 +2,7 @@
 
 const { models } = require('../models');
 const { required } = require('../db/lookup');
-const { paginate } = require('../lib/pagination');
+const { listWith } = require('../db/listing');
 const {
   NotAuthenticatedError,
   ForbiddenError,
@@ -11,6 +11,8 @@ const {
 } = require('../lib/errors');
 const { config } = require('../config/env');
 const { signToken, verifyToken } = require('../lib/tokens');
+const { mintSecret, hashSecret, readPresented } = require('../models/apiKey');
+const { localDateOf } = require('../lib/dates');
 const audit = require('../lib/audit');
 
 /**
@@ -208,16 +210,109 @@ async function listOperators(query = {}) {
   if (query.role) filter.role = query.role;
   if (query.active !== undefined) filter.active = query.active;
 
-  return paginate(Operator, {
-    filter,
-    sortField: 'email',
-    order: query.order,
-    limit: query.limit,
-    cursor: query.cursor,
+  return listWith(Operator, { filter, query, sortField: 'email' });
+}
+
+/**
+ * Mints a key and shows the secret once. Nothing stores it, so a caller that
+ * loses it mints another: the alternative is a secret readable out of a backup
+ * for as long as the key lives.
+ */
+async function createApiKey({ name, role, venueId, expiresOn, createdBy }) {
+  const { ApiKey, Venue } = models();
+
+  const venue = venueId ? await required(Venue, venueId) : null;
+  const { prefix, secret, presented } = mintSecret();
+
+  const key = await ApiKey.create({
+    name,
+    prefix,
+    secretHash: hashSecret(secret),
+    role,
+    venue: venue ? venue._id : null,
+    expiresOn: expiresOn || null,
+    createdBy,
   });
+
+  await audit.record({
+    action: 'api-key.created',
+    subjectType: 'operator',
+    subjectId: key.publicId,
+    metadata: { name, role, prefix, expiresOn: expiresOn || null, createdBy },
+  });
+
+  return { key, presented };
+}
+
+/**
+ * Resolves a presented key. Looks the prefix up, then compares the secret in
+ * constant time: looking the whole thing up would leak whether a prefix exists
+ * through the timing of the query.
+ */
+async function resolveApiKey(presented, { now = new Date() } = {}) {
+  const { ApiKey } = models();
+  const parts = readPresented(presented);
+  if (!parts) throw new NotAuthenticatedError('that is not a key this desk issued');
+
+  const key = await ApiKey.findOne({ prefix: parts.prefix }).select('+secretHash');
+  if (!key || !key.secretMatches(parts.secret)) {
+    throw new NotAuthenticatedError('that is not a key this desk issued');
+  }
+  if (!key.isLive(localDateOf(now, 'Europe/London'))) {
+    throw new ForbiddenError('that key has been revoked or has run out', {
+      expiresOn: key.expiresOn,
+    });
+  }
+
+  // Recorded rather than awaited: a key used forty times a minute should not
+  // pay for a write on every call, and losing one count is nothing.
+  ApiKey.updateOne({ _id: key._id }, { $set: { lastUsedAt: now }, $inc: { usedCount: 1 } })
+    .exec()
+    .catch(() => {});
+
+  return key;
+}
+
+async function revokeApiKey(publicId, { reason, revokedBy }) {
+  const { ApiKey } = models();
+  const key = await required(ApiKey, publicId);
+
+  if (key.revokedAt) {
+    throw new ConflictError('that key is already revoked', { key: publicId });
+  }
+  if (!reason) {
+    throw new RuleRefusedError('revoking a key needs a reason', { key: publicId });
+  }
+
+  key.revokedAt = new Date();
+  key.revokedReason = reason;
+  await key.save();
+
+  await audit.record({
+    action: 'api-key.revoked',
+    subjectType: 'operator',
+    subjectId: key.publicId,
+    metadata: { reason, revokedBy: revokedBy || null },
+  });
+
+  return key;
+}
+
+async function listApiKeys(query = {}) {
+  const { ApiKey } = models();
+  const filter = {};
+  if (query.live === true) filter.revokedAt = null;
+  if (query.live === false) filter.revokedAt = { $ne: null };
+  if (query.role) filter.role = query.role;
+
+  return listWith(ApiKey, { filter, query, sortField: 'name' });
 }
 
 module.exports = {
+  createApiKey,
+  resolveApiKey,
+  revokeApiKey,
+  listApiKeys,
   MIN_PASSWORD_LENGTH,
   recordAttempt,
   assertPasswordStrong,

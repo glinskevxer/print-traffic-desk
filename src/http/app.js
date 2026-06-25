@@ -52,8 +52,9 @@ function createApp({
       rateLimit({ windowMs: limits.windowMs, max: limits.signInMax, scope: 'sign-in' }),
     );
   }
+  const context = { version, startedAt, authenticateWith };
   for (const router of openRouters()) {
-    app.use(router.path, router.build({ version, startedAt }));
+    app.use(router.path, router.build(context));
   }
 
   // Everything past here needs an operator. Health, metrics and sign in do not.
@@ -62,7 +63,7 @@ function createApp({
   if (limits) app.use(rateLimit({ windowMs: limits.windowMs, max: limits.max }));
 
   for (const router of guardedRouters()) {
-    app.use(router.path, router.build({ version, startedAt }));
+    app.use(router.path, router.build(context));
   }
 
   app.use(notFoundHandler());

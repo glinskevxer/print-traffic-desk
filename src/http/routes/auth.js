@@ -8,6 +8,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { publicId, listQuery } = require('../schemas/common');
 const { pageEnvelope } = require('../../lib/pagination');
 const { ROLES } = require('../../models/operator');
+const { isoDate } = require('../schemas/common');
 const service = require('../../services/authService');
 
 const signInBody = z.object({
@@ -31,8 +32,15 @@ const listOperatorsQuery = listQuery.extend({
     .optional(),
 });
 
-function authRoutes() {
+/**
+ * The sign in path is mounted before the desk wide token check, so the routes
+ * here that do need an operator ask for one themselves. The middleware is
+ * taken rather than built, so a test can hand in a known operator the same way
+ * it does everywhere else.
+ */
+function authRoutes({ authenticateWith } = {}) {
   const router = Router();
+  const needsOperator = authenticateWith || authenticate();
 
   router.post(
     '/sign-in',
@@ -44,7 +52,7 @@ function authRoutes() {
 
   router.get(
     '/me',
-    authenticate(),
+    needsOperator,
     asyncHandler(async (req, res) => {
       res.json({
         id: req.operator.publicId,
@@ -59,7 +67,7 @@ function authRoutes() {
 
   router.put(
     '/password',
-    authenticate(),
+    needsOperator,
     validate({
       body: z.object({
         currentPassword: z.string().min(1).max(200),
@@ -74,7 +82,7 @@ function authRoutes() {
 
   router.post(
     '/operators',
-    authenticate(),
+    needsOperator,
     requireRole('admin'),
     validate({ body: createOperatorBody }),
     asyncHandler(async (req, res) => {
@@ -85,7 +93,7 @@ function authRoutes() {
 
   router.get(
     '/operators',
-    authenticate(),
+    needsOperator,
     requireRole('admin'),
     validate({ query: listOperatorsQuery }),
     asyncHandler(async (req, res) => {
@@ -95,7 +103,7 @@ function authRoutes() {
 
   router.put(
     '/operators/:operatorId/role',
-    authenticate(),
+    needsOperator,
     requireRole('admin'),
     validate({
       params: z.object({ operatorId: publicId('op') }),
@@ -109,11 +117,68 @@ function authRoutes() {
 
   router.delete(
     '/operators/:operatorId',
-    authenticate(),
+    needsOperator,
     requireRole('admin'),
     validate({ params: z.object({ operatorId: publicId('op') }) }),
     asyncHandler(async (req, res) => {
       res.json((await service.deactivate(req.valid.params.operatorId)).toJSON());
+    }),
+  );
+
+  router.post(
+    '/api-keys',
+    needsOperator,
+    requireRole('admin'),
+    validate({
+      body: z.object({
+        name: z.string().min(3).max(120),
+        role: z.enum(ROLES),
+        venueId: publicId('ven').optional(),
+        expiresOn: isoDate.optional(),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const { key, presented } = await service.createApiKey({
+        ...req.valid.body,
+        createdBy: req.operator.email,
+      });
+      // The only time the secret exists outside the caller's hands.
+      res.status(201).json({ ...key.toJSON(), secret: presented });
+    }),
+  );
+
+  router.get(
+    '/api-keys',
+    needsOperator,
+    requireRole('admin'),
+    validate({
+      query: listQuery.extend({
+        role: z.enum(ROLES).optional(),
+        live: z
+          .enum(['true', 'false'])
+          .transform((value) => value === 'true')
+          .optional(),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      res.json(pageEnvelope(await service.listApiKeys(req.valid.query)));
+    }),
+  );
+
+  router.delete(
+    '/api-keys/:keyId',
+    needsOperator,
+    requireRole('admin'),
+    validate({
+      params: z.object({ keyId: publicId('key') }),
+      body: z.object({ reason: z.string().min(3).max(400) }),
+    }),
+    asyncHandler(async (req, res) => {
+      const key = await service.revokeApiKey(req.valid.params.keyId, {
+        reason: req.valid.body.reason,
+        revokedBy: req.operator.email,
+      });
+      res.json(key.toJSON());
     }),
   );
 

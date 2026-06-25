@@ -2,6 +2,7 @@
 
 const request = require('supertest');
 const { buildTestApp } = require('../../helpers/app');
+const { authenticate } = require('../../../src/http/middleware/auth');
 const { useDatabase, closeTestConnection, clearCollections } = require('../../helpers/db');
 const { resetConfigForTests } = require('../../../src/config/env');
 const { makeVenue } = require('../../helpers/factories');
@@ -14,7 +15,8 @@ describe('auth endpoints', () => {
 
   beforeAll(async () => {
     await useDatabase();
-    ({ app } = buildTestApp());
+    // This file is about the real thing: signing in and presenting a token.
+    ({ app } = buildTestApp({ operator: null, authenticateWith: authenticate() }));
   });
 
   afterAll(async () => {
