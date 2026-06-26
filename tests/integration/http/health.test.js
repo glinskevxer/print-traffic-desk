@@ -2,7 +2,8 @@
 
 const request = require('supertest');
 const { buildTestApp } = require('../../helpers/app');
-const { openTestConnection, closeTestConnection } = require('../../helpers/db');
+const { openTestConnection, closeTestConnection, useDatabase } = require('../../helpers/db');
+const { replicaSetHealth } = require('../../../src/db/connection');
 
 describe('health endpoints', () => {
   afterEach(async () => {
@@ -125,5 +126,42 @@ describe('the published description of the api', () => {
     const res = await request(app).get('/health/openapi.json').expect(200);
 
     expect(res.body.servers[0].url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  });
+});
+
+describe('what ready actually means', () => {
+  afterEach(async () => {
+    await closeTestConnection();
+  });
+
+  it('reports the replica set it is talking to', async () => {
+    await useDatabase();
+    const { app } = buildTestApp();
+
+    const res = await request(app).get('/health/ready').expect(200);
+
+    expect(res.body.replicaSet.hasPrimary).toBe(true);
+    expect(res.body.replicaSet.members).toBeGreaterThanOrEqual(1);
+    expect(res.body.replicaSet.unreachable).toEqual([]);
+    expect(res.body.replicaSet.worstLagSeconds).toBeGreaterThanOrEqual(0);
+  });
+
+  it('says whether extraction is switched on without gating on it', async () => {
+    await useDatabase();
+    const { app } = buildTestApp();
+
+    const res = await request(app).get('/health/ready').expect(200);
+
+    expect(['enabled', 'off', 'unknown']).toContain(res.body.checks.extraction);
+    expect(res.body.status).toBe('ready');
+  });
+
+  it('reads the replica set health straight from the connection', async () => {
+    await useDatabase();
+
+    const health = await replicaSetHealth();
+
+    expect(health.hasPrimary).toBe(true);
+    expect(typeof health.set).toBe('string');
   });
 });

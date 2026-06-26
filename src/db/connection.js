@@ -94,6 +94,41 @@ async function ping() {
   return Number((process.hrtime.bigint() - startedAt) / 1000000n);
 }
 
+/**
+ * What the replica set is doing. A desk that can reach a primary but whose
+ * secondary is an hour behind is a desk where a read on a lagging member
+ * answers with last hour's bookings, and readiness should say so rather than
+ * answering ok because the ping came back.
+ */
+async function replicaSetHealth() {
+  const conn = getConnection();
+  const status = await conn.db.admin().command({ replSetGetStatus: 1 });
+
+  const primary = status.members.find((member) => member.stateStr === 'PRIMARY');
+  const secondaries = status.members.filter((member) => member.stateStr === 'SECONDARY');
+  const unreachable = status.members.filter(
+    (member) => !['PRIMARY', 'SECONDARY', 'ARBITER'].includes(member.stateStr),
+  );
+
+  const primaryAt = primary && primary.optimeDate ? primary.optimeDate.getTime() : null;
+  const lagSeconds = secondaries.map((member) =>
+    primaryAt && member.optimeDate
+      ? Math.max(0, Math.round((primaryAt - member.optimeDate.getTime()) / 1000))
+      : null,
+  );
+
+  return {
+    set: status.set,
+    members: status.members.length,
+    hasPrimary: Boolean(primary),
+    secondaries: secondaries.length,
+    unreachable: unreachable.map((member) => ({ name: member.name, state: member.stateStr })),
+    worstLagSeconds: lagSeconds
+      .filter((value) => value !== null)
+      .reduce((a, b) => Math.max(a, b), 0),
+  };
+}
+
 async function disconnect() {
   if (!connection) return;
   const conn = connection;
@@ -121,6 +156,7 @@ async function withTransaction(work) {
 }
 
 module.exports = {
+  replicaSetHealth,
   connect,
   disconnect,
   getConnection,
