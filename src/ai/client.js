@@ -3,6 +3,7 @@
 const OpenAI = require('openai');
 const { UpstreamError, RateLimitedError, ValidationError } = require('../lib/errors');
 const { withRetry, delayFromError } = require('../lib/retry');
+const { createBreaker } = require('../lib/breaker');
 
 /**
  * The only place the desk talks to OpenAI. Everything above this reads a
@@ -58,6 +59,8 @@ function createClient({
   baseURL = undefined,
   timeoutMs = 30000,
   attempts = 3,
+  breakerFailures = 5,
+  breakerOpenMs = 60000,
   sdk = null,
   sleep = undefined,
 } = {}) {
@@ -69,6 +72,16 @@ function createClient({
 
   const openai = sdk || new OpenAI({ apiKey, baseURL, timeout: timeoutMs, maxRetries: 0 });
 
+  // Retries handle a bad minute. The breaker handles a bad hour: once the
+  // model has failed five calls in a row, the next twenty fail instantly
+  // rather than each waiting out its own timeout.
+  const breaker = createBreaker({
+    service: SERVICE,
+    failuresToOpen: breakerFailures,
+    openMs: breakerOpenMs,
+    isFailure: (err) => Boolean(err && err.retryable),
+  });
+
   /**
    * One structured call. The model is told to answer as json and the answer is
    * parsed here, so callers only ever see an object or a desk error.
@@ -76,30 +89,32 @@ function createClient({
   async function completeJson({ system, user, temperature = 0, maxTokens = 1500, onRetry = null }) {
     const started = Date.now();
 
-    const response = await withRetry(
-      async () => {
-        try {
-          return await openai.chat.completions.create({
-            model,
-            temperature,
-            max_tokens: maxTokens,
-            response_format: { type: 'json_object' },
-            messages: [
-              { role: 'system', content: system },
-              { role: 'user', content: user },
-            ],
-          });
-        } catch (err) {
-          throw classify(err);
-        }
-      },
-      {
-        attempts,
-        sleep,
-        onRetry,
-        baseDelayMs: 800,
-        shouldRetry: (err) => Boolean(err && err.retryable),
-      },
+    const response = await breaker.run(() =>
+      withRetry(
+        async () => {
+          try {
+            return await openai.chat.completions.create({
+              model,
+              temperature,
+              max_tokens: maxTokens,
+              response_format: { type: 'json_object' },
+              messages: [
+                { role: 'system', content: system },
+                { role: 'user', content: user },
+              ],
+            });
+          } catch (err) {
+            throw classify(err);
+          }
+        },
+        {
+          attempts,
+          sleep,
+          onRetry,
+          baseDelayMs: 800,
+          shouldRetry: (err) => Boolean(err && err.retryable),
+        },
+      ),
     );
 
     const choice = response.choices && response.choices[0];
@@ -128,7 +143,7 @@ function createClient({
     };
   }
 
-  return { completeJson, model };
+  return { completeJson, model, breaker };
 }
 
 module.exports = { createClient, classify, parseJsonAnswer, delayFromError, SERVICE };

@@ -142,3 +142,122 @@ describe('the openai client', () => {
     expect(() => parseJsonAnswer('nope')).toThrow(ValidationError);
   });
 });
+
+describe('when the model is having an hour rather than a minute', () => {
+  function httpFailure(status) {
+    const err = new Error(`http ${status}`);
+    err.status = status;
+    return err;
+  }
+
+  function alwaysDown() {
+    const calls = [];
+    return {
+      calls,
+      chat: {
+        completions: {
+          create: async (request) => {
+            calls.push(request);
+            throw httpFailure(503);
+          },
+        },
+      },
+    };
+  }
+
+  it('stops asking once the model has failed enough times in a row', async () => {
+    const sdk = alwaysDown();
+    const client = createClient({
+      sdk,
+      model: 'gpt-4o-mini',
+      attempts: 1,
+      breakerFailures: 2,
+      sleep: async () => {},
+    });
+
+    await expect(client.completeJson({ system: 's', user: 'u' })).rejects.toThrow(/answered 503/);
+    await expect(client.completeJson({ system: 's', user: 'u' })).rejects.toThrow(/answered 503/);
+    expect(sdk.calls).toHaveLength(2);
+
+    await expect(client.completeJson({ system: 's', user: 'u' })).rejects.toThrow(
+      /not answering, so the desk is not asking/,
+    );
+    expect(sdk.calls).toHaveLength(2);
+  });
+
+  it('answers a caller behind an open breaker with something retryable', async () => {
+    const client = createClient({
+      sdk: alwaysDown(),
+      model: 'gpt-4o-mini',
+      attempts: 1,
+      breakerFailures: 1,
+      sleep: async () => {},
+    });
+    await client.completeJson({ system: 's', user: 'u' }).catch(() => {});
+
+    let caught;
+    try {
+      await client.completeJson({ system: 's', user: 'u' });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught.status).toBe(503);
+    expect(caught.retryable).toBe(true);
+    expect(caught.details.service).toBe('openai');
+  });
+
+  it('does not open on an answer the desk could not use', async () => {
+    const sdk = {
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [{ message: { content: 'not json at all' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 1, completion_tokens: 1 },
+          }),
+        },
+      },
+    };
+    const client = createClient({ sdk, model: 'gpt-4o-mini', breakerFailures: 2 });
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await expect(client.completeJson({ system: 's', user: 'u' })).rejects.toThrow(
+        /did not answer with json/,
+      );
+    }
+
+    expect(client.breaker.state).toBe('closed');
+  });
+
+  it('closes again once the model answers', async () => {
+    let down = true;
+    const sdk = {
+      chat: {
+        completions: {
+          create: async () => {
+            if (down) throw httpFailure(503);
+            return {
+              choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 1, completion_tokens: 1 },
+            };
+          },
+        },
+      },
+    };
+    const client = createClient({
+      sdk,
+      model: 'gpt-4o-mini',
+      attempts: 1,
+      breakerFailures: 1,
+      breakerOpenMs: 0,
+      sleep: async () => {},
+    });
+
+    await client.completeJson({ system: 's', user: 'u' }).catch(() => {});
+    down = false;
+
+    const answer = await client.completeJson({ system: 's', user: 'u' });
+    expect(answer.data).toEqual({ ok: true });
+    expect(client.breaker.state).toBe('closed');
+  });
+});
