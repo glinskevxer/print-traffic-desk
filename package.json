@@ -21,7 +21,8 @@
     "format": "prettier --write src tests scripts",
     "format:check": "prettier --check src tests scripts",
     "start:cluster": "node src/http/cluster.js",
-    "worker": "node src/workers/index.js"
+    "worker": "node src/workers/index.js",
+    "audit": "node scripts/audit-dependencies.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

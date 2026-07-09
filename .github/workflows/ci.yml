@@ -38,6 +38,11 @@ jobs:
       fail-fast: false
       matrix:
         node: ['20.18.1', '22.12.0']
+        include:
+          - node: '20.18.1'
+            mongod: '6.0.20'
+          - node: '22.12.0'
+            mongod: '7.0.14'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -51,13 +56,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/mongodb-binaries
-          key: mongod-${{ runner.os }}-7.0
+          key: mongod-${{ runner.os }}-${{ matrix.mongod || '7.0' }}
       - name: unit tests
         run: npx jest --selectProjects unit --ci
+      # Two mongod versions across the matrix: the desk runs transactions and a
+      # replica set, and both have moved between major versions before.
       - name: integration tests
         run: npx jest --selectProjects integration --ci
         env:
-          MONGOMS_VERSION: 7.0.14
+          MONGOMS_VERSION: ${{ matrix.mongod }}
 
   coverage:
     name: coverage
@@ -72,7 +79,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/mongodb-binaries
-          key: mongod-${{ runner.os }}-7.0
+          key: mongod-${{ runner.os }}-${{ matrix.mongod || '7.0' }}
       - run: npx jest --coverage --ci
       - uses: actions/upload-artifact@v4
         if: always()
@@ -112,5 +119,5 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - name: advisories in what ships
-        run: npm audit --omit=dev --audit-level=high
+      - name: advisories in what ships, minus the ones written down
+        run: node scripts/audit-dependencies.js

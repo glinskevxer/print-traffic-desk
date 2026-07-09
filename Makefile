@@ -49,8 +49,8 @@ lint-fix: ## fix what can be fixed
 check: lint test ## what has to pass before a push
 
 .PHONY: audit
-audit: ## look for advisories in what we depend on
-	npm audit --omit=dev
+audit: ## look for advisories, ignoring the ones written down as accepted
+	node scripts/audit-dependencies.js
 
 .PHONY: up
 up: ## start mongo and the desk in docker

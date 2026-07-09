@@ -1,0 +1,21 @@
+{
+  "comment": "Advisories the desk has read and is living with for now. Each one needs the reason the desk is not reached by it and a date the acceptance runs out, at which point it fails the build again and somebody looks properly. Nothing goes in here to make a build green.",
+  "accepted": [
+    {
+      "id": "1118997",
+      "package": "mongoose",
+      "title": "Improper sanitization of $nor in sanitizeFilter may allow NoSQL injection",
+      "why": "The desk does not use sanitizeFilter: it is switched off on purpose in src/db/connection.js because it rewrites the operator objects keyset paging builds. Nothing client supplied reaches a filter as an object, because every request body and query goes through zod first and comes out as primitives, and rejectMongoOperators refuses any body carrying a key that begins with a dollar. Reviewed against the advisory on 2026-07-09.",
+      "until": "2027-01-31",
+      "fixBy": "mongoose 8.9.6, which is a patch bump once the rest of the 8.9 line settles"
+    },
+    {
+      "id": "1115527",
+      "package": "path-to-regexp",
+      "title": "Regular expression denial of service via multiple route parameters",
+      "why": "Reached through express 4.21.2. The desk has two routes with more than one parameter and both parameters are anchored public id patterns of a fixed length, so neither can be fed the repeated separators the advisory needs. Every request also has a timeout in front of it. The real fix is express 5, which is a breaking change the desk has not taken yet. Reviewed on 2026-07-09.",
+      "until": "2027-03-31",
+      "fixBy": "express 5, once the middleware signatures are checked"
+    }
+  ]
+}
