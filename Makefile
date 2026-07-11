@@ -52,6 +52,10 @@ check: lint test ## what has to pass before a push
 audit: ## look for advisories, ignoring the ones written down as accepted
 	node scripts/audit-dependencies.js
 
+.PHONY: releasable
+releasable: ## check the tree is fit to deploy
+	node scripts/releasable.js
+
 .PHONY: up
 up: ## start mongo and the desk in docker
 	$(COMPOSE) up --build -d
