@@ -523,6 +523,22 @@ const OPERATIONS = Object.freeze([
     answers: 'Venue',
   },
   {
+    method: 'post',
+    path: '/venues/{venueId}/closures',
+    tag: 'catalogue',
+    summary: 'shut a house for a period and say what is booked inside it',
+    access: 'auth',
+    answers: 'Venue',
+  },
+  {
+    method: 'delete',
+    path: '/venues/{venueId}/closures/{startsOn}',
+    tag: 'catalogue',
+    summary: 'reopen a house, or remove a closure typed in by mistake',
+    access: 'auth',
+    answers: 'Venue',
+  },
+  {
     method: 'put',
     path: '/venues/{venueId}/active',
     tag: 'catalogue',

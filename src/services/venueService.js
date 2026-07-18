@@ -5,6 +5,7 @@ const { required } = require('../db/lookup');
 const { listWith, guardDuplicates } = require('../db/listing');
 const { NotFoundError, RuleRefusedError } = require('../lib/errors');
 const { assertZone } = require('../lib/dates');
+const audit = require('../lib/audit');
 const { parseCsv, blankToNull } = require('../lib/csv');
 
 async function createVenue(input) {
@@ -301,7 +302,75 @@ async function importVenues(text, { dryRun = false } = {}) {
   };
 }
 
+/**
+ * Shuts a house for a period. Existing bookings inside it are reported rather
+ * than cancelled: what happens to them is a conversation with the venue, not
+ * something the desk decides on their behalf.
+ */
+async function closeVenue(publicId, { startsOn, endsOn, reason }) {
+  const { Booking } = models();
+  const venue = await getVenue(publicId);
+
+  if (endsOn < startsOn) {
+    throw new RuleRefusedError('a closure cannot end before it starts', { startsOn, endsOn });
+  }
+  if (
+    venue.closures.some((closure) => closure.startsOn === startsOn && closure.endsOn === endsOn)
+  ) {
+    throw new RuleRefusedError('that closure is already on file', { startsOn, endsOn });
+  }
+
+  const affected = await Booking.find({
+    venue: venue._id,
+    status: { $in: ['held', 'cleared', 'confirmed'] },
+    localDate: { $gte: startsOn, $lte: endsOn },
+  });
+
+  venue.closures.push({ startsOn, endsOn, reason });
+  await venue.save();
+
+  await audit.record({
+    action: 'venue.closed',
+    subjectType: 'venue',
+    subjectId: venue.publicId,
+    metadata: { startsOn, endsOn, reason, bookingsInside: affected.length },
+  });
+
+  return {
+    venue,
+    affected: affected.map((booking) => ({
+      id: booking.publicId,
+      reference: booking.reference,
+      localDate: booking.localDate,
+      status: booking.status,
+    })),
+  };
+}
+
+/** Reopens a house early, or removes a closure typed in by mistake. */
+async function reopenVenue(publicId, { startsOn }) {
+  const venue = await getVenue(publicId);
+  const before = venue.closures.length;
+
+  venue.closures = venue.closures.filter((closure) => closure.startsOn !== startsOn);
+  if (venue.closures.length === before) {
+    throw new NotFoundError('closure', startsOn);
+  }
+  await venue.save();
+
+  await audit.record({
+    action: 'venue.reopened',
+    subjectType: 'venue',
+    subjectId: venue.publicId,
+    metadata: { startsOn },
+  });
+
+  return venue;
+}
+
 module.exports = {
+  closeVenue,
+  reopenVenue,
   importVenues,
   IMPORT_COLUMNS,
   diaryFor,

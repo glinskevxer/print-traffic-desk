@@ -403,3 +403,152 @@ describe('taking a spreadsheet of houses', () => {
       .expect(403);
   });
 });
+
+describe('shutting a house for a while', () => {
+  let app;
+  let holder;
+  let title;
+  let venue;
+  let vault;
+
+  beforeAll(async () => {
+    await useDatabase();
+    ({ app } = buildTestApp());
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    venue = await makeVenue({ code: 'GB-LON-PRINCE' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  const closure = (overrides = {}) => ({
+    startsOn: '2025-06-01',
+    endsOn: '2025-06-30',
+    reason: 'the roof is being replaced',
+    ...overrides,
+  });
+
+  function book(localDate) {
+    return bookings.requestBooking({
+      titleId: title.publicId,
+      venueId: venue.publicId,
+      localDate,
+      localTime: '19:30',
+      exhibitionType: 'repertory',
+      today: '2025-05-01',
+    });
+  }
+
+  it('puts a closure on file', async () => {
+    const res = await request(app)
+      .post(`/venues/${venue.publicId}/closures`)
+      .send(closure())
+      .expect(201);
+
+    expect(res.body.closures).toHaveLength(1);
+    expect(res.body.closures[0].reason).toBe('the roof is being replaced');
+    expect(res.body.bookingsInside).toEqual([]);
+  });
+
+  it('refuses a booking inside the closure, and says why', async () => {
+    await request(app).post(`/venues/${venue.publicId}/closures`).send(closure()).expect(201);
+
+    let caught;
+    try {
+      await book('2025-06-20');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught.message).toMatch(/this house is shut: the roof is being replaced/);
+    expect(caught.details.closure).toEqual({ startsOn: '2025-06-01', endsOn: '2025-06-30' });
+  });
+
+  it('takes a booking on the day after the house reopens', async () => {
+    await request(app).post(`/venues/${venue.publicId}/closures`).send(closure()).expect(201);
+
+    const { booking } = await book('2025-07-01');
+
+    expect(booking.status).toBe('held');
+  });
+
+  it('refuses on the first and the last day of the closure', async () => {
+    await request(app).post(`/venues/${venue.publicId}/closures`).send(closure()).expect(201);
+
+    await expect(book('2025-06-01')).rejects.toThrow(/this house is shut/);
+    await expect(book('2025-06-30')).rejects.toThrow(/this house is shut/);
+  });
+
+  it('says what is already booked inside a new closure without touching it', async () => {
+    const { booking } = await book('2025-06-20');
+
+    const res = await request(app)
+      .post(`/venues/${venue.publicId}/closures`)
+      .send(closure())
+      .expect(201);
+
+    expect(res.body.bookingsInside).toHaveLength(1);
+    expect(res.body.bookingsInside[0].reference).toBe(booking.reference);
+    expect((await bookings.getBooking(booking.publicId)).status).toBe('held');
+  });
+
+  it('refuses a closure that ends before it starts', async () => {
+    await request(app)
+      .post(`/venues/${venue.publicId}/closures`)
+      .send(closure({ startsOn: '2025-07-01', endsOn: '2025-06-01' }))
+      .expect(422);
+  });
+
+  it('refuses the same closure twice', async () => {
+    await request(app).post(`/venues/${venue.publicId}/closures`).send(closure()).expect(201);
+
+    await request(app).post(`/venues/${venue.publicId}/closures`).send(closure()).expect(422);
+  });
+
+  it('reopens the house again', async () => {
+    await request(app).post(`/venues/${venue.publicId}/closures`).send(closure()).expect(201);
+
+    const res = await request(app)
+      .delete(`/venues/${venue.publicId}/closures/2025-06-01`)
+      .expect(200);
+
+    expect(res.body.closures).toEqual([]);
+    await expect(book('2025-06-20')).resolves.toBeTruthy();
+  });
+
+  it('says so when there is no such closure to remove', async () => {
+    await request(app).delete(`/venues/${venue.publicId}/closures/2025-06-01`).expect(404);
+  });
+
+  it('records the closure and the reopening', async () => {
+    await request(app).post(`/venues/${venue.publicId}/closures`).send(closure()).expect(201);
+    await request(app).delete(`/venues/${venue.publicId}/closures/2025-06-01`).expect(200);
+
+    const trail = await request(app).get(`/audit-events/venue/${venue.publicId}`).expect(200);
+    expect(trail.body.items.map((each) => each.action)).toEqual(['venue.reopened', 'venue.closed']);
+  });
+
+  it('only an admin shuts a house', async () => {
+    const { app: programmer } = buildTestApp({ operator: stubOperator({ role: 'programmer' }) });
+
+    await request(programmer)
+      .post(`/venues/${venue.publicId}/closures`)
+      .send(closure())
+      .expect(403);
+  });
+});

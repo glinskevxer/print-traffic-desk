@@ -115,6 +115,14 @@ async function requestBooking(input, { attempts = 3, sleep } = {}) {
         if (!venue.active) {
           throw new RuleRefusedError('this house is not taking bookings', { venue: input.venueId });
         }
+        const closure = venue.closedOn(input.localDate);
+        if (closure) {
+          countBooking('refused', { rule: 'venue-closed' });
+          throw new RuleRefusedError(`this house is shut: ${closure.reason}`, {
+            venue: input.venueId,
+            closure: { startsOn: closure.startsOn, endsOn: closure.endsOn },
+          });
+        }
 
         const takenHere = await screeningsTakenAt(title._id, venue._id, session);
 

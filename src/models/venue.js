@@ -36,6 +36,23 @@ const boothSchema = new Schema(
   { _id: false },
 );
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A house shuts for a refit, a flood or a summer break, and the desk should
+ * refuse the booking rather than send a print to a building with the doors
+ * locked. Closures are dated ranges rather than a flag, because a programmer
+ * books three months ahead and wants to know now.
+ */
+const closureSchema = new Schema(
+  {
+    startsOn: { type: String, required: true, match: [ISO_DATE, 'ISO date'] },
+    endsOn: { type: String, required: true, match: [ISO_DATE, 'ISO date'] },
+    reason: { type: String, required: true, trim: true, maxlength: 200 },
+  },
+  { _id: false },
+);
+
 const venueSchema = new Schema({
   code: {
     type: String,
@@ -57,6 +74,7 @@ const venueSchema = new Schema({
   outboundLeadDays: { type: Number, default: 1, min: 0, max: 21 },
   carrierAccount: { type: String, trim: true, maxlength: 60 },
   active: { type: Boolean, default: true },
+  closures: { type: [closureSchema], default: [] },
 });
 
 venueSchema.plugin(basePlugin, { prefix: 'ven' });
@@ -75,5 +93,23 @@ venueSchema.methods.bestSoundFor = function bestSoundFor(printFormat) {
 venueSchema.methods.runsSpeed = function runsSpeed(fps) {
   return this.booth.speeds.includes(fps);
 };
+
+/** The closure covering a date, or null when the house is open. */
+venueSchema.methods.closedOn = function closedOn(localDate) {
+  return (
+    (this.closures || []).find(
+      (closure) => closure.startsOn <= localDate && localDate <= closure.endsOn,
+    ) || null
+  );
+};
+
+venueSchema.pre('validate', function orderTheClosures(next) {
+  for (const closure of this.closures || []) {
+    if (closure.endsOn < closure.startsOn) {
+      this.invalidate('closures', 'a closure cannot end before it starts');
+    }
+  }
+  next();
+});
 
 module.exports = { name: 'Venue', schema: venueSchema, collection: 'venues' };

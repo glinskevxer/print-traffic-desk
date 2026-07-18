@@ -174,6 +174,38 @@ function venueRoutes() {
     }),
   );
 
+  router.post(
+    '/:venueId/closures',
+    requireRole('admin'),
+    validate({
+      params: venueParams,
+      body: z.object({
+        startsOn: isoDate,
+        endsOn: isoDate,
+        reason: z.string().min(3).max(200),
+      }),
+    }),
+    asyncHandler(async (req, res) => {
+      const { venue, affected } = await venueService.closeVenue(
+        req.valid.params.venueId,
+        req.valid.body,
+      );
+      res.status(201).json({ ...venue.toJSON(), bookingsInside: affected });
+    }),
+  );
+
+  router.delete(
+    '/:venueId/closures/:startsOn',
+    requireRole('admin'),
+    validate({ params: venueParams.extend({ startsOn: isoDate }) }),
+    asyncHandler(async (req, res) => {
+      const venue = await venueService.reopenVenue(req.valid.params.venueId, {
+        startsOn: req.valid.params.startsOn,
+      });
+      res.json(venue.toJSON());
+    }),
+  );
+
   router.put(
     '/:venueId/active',
     requireRole('admin'),
