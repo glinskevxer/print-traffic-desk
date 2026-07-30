@@ -49,7 +49,13 @@ function createApp({
     // by operator, because the caller has not proved who they are yet.
     app.use(
       '/auth/sign-in',
-      rateLimit({ windowMs: limits.windowMs, max: limits.signInMax, scope: 'sign-in' }),
+      rateLimit({
+        windowMs: limits.windowMs,
+        max: limits.signInMax,
+        scope: 'sign-in',
+        // Nobody has proved who they are yet, so nobody gets a bigger ceiling.
+        perRole: false,
+      }),
     );
   }
   const context = { version, startedAt, authenticateWith };

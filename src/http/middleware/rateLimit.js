@@ -11,12 +11,39 @@ const { RateLimitedError } = require('../../lib/errors');
 
 const DEFAULTS = Object.freeze({ windowMs: 60000, max: 120 });
 
+/**
+ * What a caller is allowed, as a multiple of the configured ceiling.
+ *
+ * A booking screen polls the diary and a person clicks around, and holding the
+ * screen to what a person needs is how a venue's own software started missing
+ * updates. An admin gets more because an admin runs the reports; a viewer gets
+ * the base because a viewer is reading.
+ */
+const ROLE_MULTIPLIERS = Object.freeze({
+  viewer: 1,
+  programmer: 2,
+  traffic: 2,
+  archivist: 2,
+  admin: 4,
+});
+
+/** A machine polls, so a key gets more than the person who minted it. */
+const MACHINE_MULTIPLIER = 3;
+
+function ceilingFor(req, max) {
+  if (!req.operator) return max;
+  const role = ROLE_MULTIPLIERS[req.operator.role] || 1;
+  const machine = req.apiKey ? MACHINE_MULTIPLIER : 1;
+  return Math.round(max * role * machine);
+}
+
 function windowStart(now, windowMs) {
   return new Date(Math.floor(now / windowMs) * windowMs);
 }
 
 /** The operator if there is one, otherwise the address the call came from. */
 function defaultKeyOf(req) {
+  if (req.apiKey) return `key:${req.apiKey.publicId}`;
   if (req.operator) return `op:${req.operator.publicId}`;
   return `ip:${req.ip || 'unknown'}`;
 }
@@ -46,22 +73,24 @@ function rateLimit({
   max = DEFAULTS.max,
   keyOf = defaultKeyOf,
   scope = 'all',
+  perRole = true,
 } = {}) {
   return async function limit(req, res, next) {
     try {
       const now = Date.now();
+      const ceiling = perRole ? ceilingFor(req, max) : max;
       const { count, resetsAt } = await countRequest({
         key: `${scope}:${keyOf(req)}`,
         now,
         windowMs,
       });
 
-      const remaining = Math.max(0, max - count);
-      res.set('ratelimit-limit', String(max));
+      const remaining = Math.max(0, ceiling - count);
+      res.set('ratelimit-limit', String(ceiling));
       res.set('ratelimit-remaining', String(remaining));
       res.set('ratelimit-reset', String(Math.ceil((resetsAt.getTime() - now) / 1000)));
 
-      if (count > max) {
+      if (count > ceiling) {
         return next(new RateLimitedError(Math.ceil((resetsAt.getTime() - now) / 1000)));
       }
       return next();
@@ -73,4 +102,13 @@ function rateLimit({
   };
 }
 
-module.exports = { rateLimit, countRequest, windowStart, defaultKeyOf, DEFAULTS };
+module.exports = {
+  rateLimit,
+  countRequest,
+  windowStart,
+  defaultKeyOf,
+  ceilingFor,
+  ROLE_MULTIPLIERS,
+  MACHINE_MULTIPLIER,
+  DEFAULTS,
+};
