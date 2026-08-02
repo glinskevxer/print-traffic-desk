@@ -35,11 +35,20 @@ function isId(value, prefix) {
  * Booking references are read aloud on the phone, so they stay short and carry
  * the screening year and day of year. The suffix is random, not sequential,
  * because two desks book at the same time and neither holds a counter.
+ *
+ * It takes the venue's local date, not the instant. A late screening in a zone
+ * ahead of UTC falls on the next UTC day, and a 31 December show in Auckland
+ * was getting next year's reference: the venue reads the date off their own
+ * calendar and the reference has to match what they are looking at.
  */
-function bookingReference(screeningDate, random = crypto.randomBytes(4)) {
-  const year = screeningDate.getUTCFullYear();
+function bookingReference(localDate, random = crypto.randomBytes(4)) {
+  if (typeof localDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(localDate)) {
+    throw new TypeError('a booking reference is made from the venue local date');
+  }
+  const [year, month, day] = localDate.split('-').map(Number);
   const startOfYear = Date.UTC(year, 0, 1);
-  const dayOfYear = Math.floor((screeningDate.getTime() - startOfYear) / 86400000) + 1;
+  const dayOfYear = Math.floor((Date.UTC(year, month - 1, day) - startOfYear) / 86400000) + 1;
+
   return `BK-${year}-${String(dayOfYear).padStart(3, '0')}-${encode(random)}`;
 }
 

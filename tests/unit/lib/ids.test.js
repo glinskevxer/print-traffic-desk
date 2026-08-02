@@ -38,19 +38,26 @@ describe('identifiers', () => {
   });
 
   it('stamps a booking reference with the screening year and day of year', () => {
-    const ref = bookingReference(new Date('2025-04-17T19:30:00Z'), Buffer.from([0, 1, 2, 3]));
+    const ref = bookingReference('2025-04-17', Buffer.from([0, 1, 2, 3]));
 
     expect(ref).toBe('BK-2025-107-0123');
     expect(isBookingReference(ref)).toBe(true);
   });
 
   it('handles the first and last day of the year', () => {
-    expect(bookingReference(new Date('2025-01-01T00:05:00Z'), Buffer.from([0, 0, 0, 0]))).toBe(
-      'BK-2025-001-0000',
-    );
-    expect(bookingReference(new Date('2024-12-31T23:00:00Z'), Buffer.from([0, 0, 0, 0]))).toBe(
-      'BK-2024-366-0000',
-    );
+    expect(bookingReference('2025-01-01', Buffer.from([0, 0, 0, 0]))).toBe('BK-2025-001-0000');
+    expect(bookingReference('2024-12-31', Buffer.from([0, 0, 0, 0]))).toBe('BK-2024-366-0000');
+  });
+
+  it('reads the date off the venue calendar, not off the instant', () => {
+    // A 23:30 screening in Auckland on new year's eve is 10:30 UTC on the
+    // first, and the venue is looking at a ticket that says the thirty first.
+    expect(bookingReference('2025-12-31', Buffer.from([0, 0, 0, 0]))).toBe('BK-2025-365-0000');
+  });
+
+  it('refuses anything that is not a local date', () => {
+    expect(() => bookingReference(new Date('2025-04-17T19:30:00Z'))).toThrow(TypeError);
+    expect(() => bookingReference('17/04/2025')).toThrow(/venue local date/);
   });
 
   it('rejects references that do not match the printed shape', () => {

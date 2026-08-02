@@ -264,7 +264,7 @@ async function holdBooking({
   const [booking] = await Booking.create(
     [
       {
-        reference: bookingReference(screeningAt),
+        reference: bookingReference(input.localDate),
         title: title._id,
         venue: venue._id,
         element: element._id,
