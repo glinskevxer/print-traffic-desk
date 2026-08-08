@@ -4,6 +4,7 @@ const { models } = require('../models');
 const { required } = require('../db/lookup');
 const { withTransaction } = require('../db/connection');
 const audit = require('../lib/audit');
+const { parseCsv, blankToNull } = require('../lib/csv');
 const { listWith, guardDuplicates } = require('../db/listing');
 const { ConflictError, RuleRefusedError } = require('../lib/errors');
 
@@ -204,7 +205,120 @@ async function mergeTitles({ keepId, foldId, reason }) {
   });
 }
 
+/**
+ * Takes the catalogue an archive already keeps, usually exported out of
+ * whatever they used before.
+ *
+ * Same rule as the venue import: nothing is written until every row reads, and
+ * a title already on file by slug is left alone rather than overwritten. An
+ * import that silently changed the year on forty records would be worse than
+ * one that refused.
+ */
+const IMPORT_COLUMNS = Object.freeze([
+  'title',
+  'year',
+  'slug',
+  'originalTitle',
+  'director',
+  'countries',
+  'languages',
+  'runtimeMinutes',
+]);
+
+function rowToTitle(row, line, rightsHolder) {
+  const problems = [];
+  const name = blankToNull(row.title);
+  const year = Number(blankToNull(row.year));
+
+  if (!name) problems.push('title is missing');
+  if (!Number.isInteger(year) || year < 1888 || year > 2100) {
+    problems.push(`${row.year || 'nothing'} is not a year a film was made in`);
+  }
+
+  const directors = (blankToNull(row.director) || '')
+    .split(/[;|]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const runtime = blankToNull(row.runtimeMinutes);
+  if (runtime !== null && !Number.isInteger(Number(runtime))) {
+    problems.push('runtimeMinutes is not a number');
+  }
+
+  return {
+    line,
+    problems,
+    title: {
+      title: name,
+      year,
+      slug: blankToNull(row.slug) || undefined,
+      originalTitle: blankToNull(row.originalTitle) || undefined,
+      credits: directors.map((who) => ({ name: who, role: 'director' })),
+      countries: splitCodes(row.countries, (code) => code.toUpperCase()),
+      originalLanguages: splitCodes(row.languages, (code) => code.toLowerCase()),
+      runtimeMinutes: runtime === null ? undefined : Number(runtime),
+      rightsHolderId: rightsHolder,
+    },
+  };
+}
+
+function splitCodes(value, normalise) {
+  return (blankToNull(value) || '')
+    .split(/[;|,]/)
+    .map((code) => normalise(code.trim()))
+    .filter(Boolean);
+}
+
+async function importTitles(text, { rightsHolderId, dryRun = false }) {
+  const { Title } = models();
+  const { headers, rows } = parseCsv(text);
+
+  const missingColumns = ['title', 'year'].filter((name) => !headers.includes(name));
+  if (missingColumns.length > 0) {
+    throw new RuleRefusedError('that file is missing columns the desk needs', {
+      missing: missingColumns,
+      expected: IMPORT_COLUMNS,
+    });
+  }
+
+  const read = rows.map((row, index) => rowToTitle(row, index + 2, rightsHolderId));
+  const broken = read.filter((entry) => entry.problems.length > 0);
+  if (broken.length > 0) {
+    throw new RuleRefusedError('that file has rows the desk cannot read', {
+      rows: broken.map((entry) => ({ line: entry.line, problems: entry.problems })),
+    });
+  }
+
+  const wanted = read.map((entry) => entry.title.slug).filter(Boolean);
+  const onFile = wanted.length
+    ? (await Title.find({ slug: { $in: wanted } }, 'slug')).map((each) => each.slug)
+    : [];
+  const toAdd = read.filter((entry) => !onFile.includes(entry.title.slug));
+
+  if (dryRun) {
+    return { read: read.length, added: 0, wouldAdd: toAdd.length, skipped: onFile, dryRun: true };
+  }
+
+  const added = [];
+  for (const entry of toAdd) {
+    // eslint-disable-next-line no-await-in-loop
+    const created = await createTitle(entry.title);
+    added.push(created.slug);
+  }
+
+  return {
+    read: read.length,
+    added: added.length,
+    wouldAdd: 0,
+    slugs: added,
+    skipped: onFile,
+    dryRun: false,
+  };
+}
+
 module.exports = {
+  importTitles,
+  IMPORT_COLUMNS,
   mergeTitles,
   slugify,
   uniqueSlug,
