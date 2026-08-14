@@ -62,13 +62,8 @@ async function freeElementsFor({ title, span }) {
  * that is the order the house can do something about them: a licence can be
  * asked for, a print cannot be conjured, and a date can be moved.
  */
-async function assessVenue({ title, venue, localDate, exhibitionType, elements, today }) {
-  const decision = await rightsService.clearScreeningRequest({
-    titleId: title.publicId,
-    venue,
-    localDate,
-    exhibitionType,
-  });
+function assessVenue({ licences, venue, localDate, exhibitionType, elements, today }) {
+  const decision = rightsService.decide({ licences, venue, localDate, exhibitionType });
 
   if (!decision.cleared) {
     return {
@@ -148,22 +143,26 @@ async function housesFor({ titleId, localDate, exhibitionType = 'repertory', ter
   const venues = await Venue.find(filter).sort({ code: 1 });
 
   const span = { startsOn: today || localDate, endsOn: addDays(localDate, LOOKAHEAD_DAYS) };
-  const elements = await freeElementsFor({ title, span });
+  const [elements, licences] = await Promise.all([
+    freeElementsFor({ title, span }),
+    rightsService.licencesFor(title.publicId),
+  ]);
 
   // Each house is an independent question, so they go together. A circuit has
   // tens of houses, not thousands, and asking them one at a time turned a
   // season planning screen into four seconds of waiting.
-  const houses = await Promise.all(
-    venues.map((venue) =>
-      assessVenue({
-        title,
-        venue,
-        localDate,
-        exhibitionType,
-        elements,
-        today: today || localDate,
-      }),
-    ),
+  // The licences are loaded once and the engine runs in memory per house, so
+  // a season planning screen is two queries and a loop rather than two queries
+  // per house.
+  const houses = venues.map((venue) =>
+    assessVenue({
+      licences,
+      venue,
+      localDate,
+      exhibitionType,
+      elements,
+      today: today || localDate,
+    }),
   );
 
   return {

@@ -180,3 +180,92 @@ describe('where a title could be shown', () => {
     expect(answer.houses.every((house) => house.available === false)).toBe(true);
   });
 });
+
+describe('what a season planning screen costs', () => {
+  let holder;
+  let title;
+  let vault;
+  let nextHouse = 0;
+
+  beforeAll(async () => {
+    await useDatabase();
+  });
+
+  afterAll(async () => {
+    await closeTestConnection();
+  });
+
+  beforeEach(async () => {
+    await clearCollections();
+    nextHouse = 0;
+    holder = await makeRightsHolder({ name: 'Park Circus' });
+    title = await makeTitle({ rightsHolder: holder._id, status: 'bookable' });
+    vault = await makeVenue({ code: 'GB-BER-VAULT', city: 'Berkhamsted' });
+    await makePrintElement({
+      title: title._id,
+      owner: holder._id,
+      currentLocation: vault._id,
+      custodian: vault._id,
+      status: 'available',
+    });
+    await makeRightsWindow({ title: title._id, rightsHolder: holder._id });
+  });
+
+  async function houses(count) {
+    for (let i = 0; i < count; i += 1) {
+      nextHouse += 1;
+      await makeVenue({ code: `GB-LON-H${String(nextHouse).padStart(3, '0')}` });
+    }
+  }
+
+  it('reads the licences once, however many houses it asks about', async () => {
+    const { RightsWindow } = models();
+    const spy = jest.spyOn(RightsWindow, 'find');
+    await houses(8);
+
+    await service.housesFor({
+      titleId: title.publicId,
+      localDate: '2025-06-20',
+      today: '2025-05-15',
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not read more as more houses are added', async () => {
+    const { RightsWindow } = models();
+    await houses(3);
+    const few = jest.spyOn(RightsWindow, 'find');
+    await service.housesFor({
+      titleId: title.publicId,
+      localDate: '2025-06-20',
+      today: '2025-05-15',
+    });
+    const readsForThree = few.mock.calls.length;
+    few.mockRestore();
+
+    await houses(20);
+    const many = jest.spyOn(RightsWindow, 'find');
+    await service.housesFor({
+      titleId: title.publicId,
+      localDate: '2025-06-20',
+      today: '2025-05-15',
+    });
+
+    expect(many.mock.calls.length).toBe(readsForThree);
+  });
+
+  it('still answers every house correctly after the change', async () => {
+    await houses(5);
+
+    const answer = await service.housesFor({
+      titleId: title.publicId,
+      localDate: '2025-06-20',
+      today: '2025-05-15',
+    });
+
+    // Five new houses plus the vault, which is a venue like any other.
+    expect(answer.houses).toHaveLength(6);
+    expect(answer.availableCount).toBeGreaterThan(0);
+  });
+});

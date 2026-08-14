@@ -169,19 +169,18 @@ async function listWindows(query = {}) {
  * needs, then runs the engine. Nothing is written: a booking calls this, and so
  * does the programmer who wants to know before they advertise.
  */
-async function clearScreeningRequest({
-  titleId,
-  venue,
-  localDate,
-  exhibitionType,
-  screenings = 1,
-  screeningsAtVenue = 0,
-}) {
+/**
+ * Every licence on a title, with the venue facts the exclusivity rule needs
+ * folded in. Loaded once and handed around: an availability sweep asks the
+ * same question of thirty houses, and loading the licences thirty times was
+ * sixty queries for one screen.
+ */
+async function licencesFor(titleId) {
   const { RightsWindow, Title, Venue } = models();
 
   const title = await required(Title, titleId);
-
   const windows = await RightsWindow.find({ title: title._id });
+
   const holderVenueIds = windows
     .filter((window) => window.exclusivity.heldBy)
     .map((window) => window.exclusivity.heldBy);
@@ -190,16 +189,35 @@ async function clearScreeningRequest({
     : [];
   const venuesById = new Map(holderVenues.map((each) => [String(each._id), each]));
 
-  const decorate = (window) => {
+  const decorated = windows.map((window) => {
     const holder = venuesById.get(String(window.exclusivity.heldBy));
     return Object.assign(window.toObject({ virtuals: false }), {
       publicId: window.publicId,
       holderCity: holder ? holder.city : null,
       holderName: holder ? holder.name : null,
     });
-  };
+  });
 
-  const decorated = windows.map(decorate);
+  return {
+    title,
+    windows: decorated,
+    exclusives: decorated.filter((window) => window.exclusivity.scope !== 'none'),
+  };
+}
+
+/**
+ * Runs the engine against licences already loaded. Nothing is written: a
+ * booking calls this, and so does the programmer who wants to know before they
+ * advertise.
+ */
+function decide({
+  licences,
+  venue,
+  localDate,
+  exhibitionType,
+  screenings = 1,
+  screeningsAtVenue = 0,
+}) {
   const request = {
     localDate,
     country: venue.territory,
@@ -211,12 +229,24 @@ async function clearScreeningRequest({
   };
 
   const decision = clearScreening({
-    windows: decorated,
-    exclusiveWindows: decorated.filter((window) => window.exclusivity.scope !== 'none'),
+    windows: licences.windows,
+    exclusiveWindows: licences.exclusives,
     request,
   });
 
   return { ...decision, request, details: refusalDetails(decision.evaluations) };
+}
+
+async function clearScreeningRequest({
+  titleId,
+  venue,
+  localDate,
+  exhibitionType,
+  screenings = 1,
+  screeningsAtVenue = 0,
+}) {
+  const licences = await licencesFor(titleId);
+  return decide({ licences, venue, localDate, exhibitionType, screenings, screeningsAtVenue });
 }
 
 /** Same question, phrased from an instant rather than a local date. */
@@ -330,6 +360,8 @@ async function renewWindow(publicId, { startsOn, endsOn, changes = {}, reference
 }
 
 module.exports = {
+  licencesFor,
+  decide,
   renewWindow,
   RENEWABLE,
   createWindow,
