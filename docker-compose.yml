@@ -23,6 +23,9 @@ services:
     build:
       context: .
       target: runtime
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        BUILT_AT: ${BUILT_AT:-unknown}
     depends_on:
       mongo:
         condition: service_healthy

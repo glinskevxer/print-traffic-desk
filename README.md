@@ -77,6 +77,17 @@ The full shape is at `GET /health/openapi.json`, generated from the same
 constants the validators use, so it cannot describe a gauge the desk does not
 run.
 
+## What is deployed
+
+`GET /health/version` says the version, the commit and when the image was
+built. The image is given its commit at build time, a checkout reads it out of
+git, and anything else says `unknown` rather than making something up.
+
+```
+curl -s localhost:4010/health/version
+{"service":"printdesk","version":"1.0.0","shortCommit":"5ff11bc","source":"image", ...}
+```
+
 ## Roles
 
 | role | what it does |
@@ -104,6 +115,14 @@ rounding a call to the nearest cent hid a month of it behind a column of zeros.
 
 Set `EXTRACTION_ENABLED=false` and the desk works exactly as before; the licence
 terms just get typed in by hand.
+
+## The work that happens on its own
+
+`npm run worker` runs the scheduled jobs in the same image as the desk: lapsing
+holds, sending despatch notes, expiring licences, quarantining prints nobody
+has looked at in twenty runs, and pruning the operational chaff. Each job
+claims what it works on, so running two workers is safe and running none only
+means nothing goes out until one starts.
 
 ## Money
 

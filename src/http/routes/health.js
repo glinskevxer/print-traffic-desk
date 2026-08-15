@@ -3,6 +3,7 @@
 const { Router } = require('express');
 const { isConnected, ping, replicaSetHealth } = require('../../db/connection');
 const { config } = require('../../config/env');
+const { buildInfo } = require('../../lib/build');
 const { openapiDocument } = require('../openapi');
 
 /**
@@ -10,7 +11,7 @@ const { openapiDocument } = require('../openapi');
  * can serve, and a load balancer that conflates them restarts a healthy service
  * every time mongo hiccups.
  */
-function healthRoutes({ version, startedAt }) {
+function healthRoutes({ startedAt }) {
   const router = Router();
 
   router.get('/live', (_req, res) => {
@@ -70,7 +71,7 @@ function healthRoutes({ version, startedAt }) {
   });
 
   router.get('/version', (_req, res) => {
-    res.json({ service: 'printdesk', version, node: process.version });
+    res.json(buildInfo());
   });
 
   return router;

@@ -94,11 +94,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: build
-        run: docker build --target runtime -t printdesk:ci .
+        run: |
+          docker build --target runtime \
+            --build-arg GIT_COMMIT="${{ github.sha }}" \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t printdesk:ci .
       # The image is worth nothing if it cannot start, and a broken CMD is not
       # something the tests would ever catch.
       - name: the command line runs inside the image
         run: docker run --rm printdesk:ci node src/cli/index.js help
+      - name: the image knows which commit it is
+        run: |
+          docker run --rm printdesk:ci node -e \
+            "const {buildInfo}=require('./src/lib/build');const b=buildInfo();
+             if (b.commit !== '${{ github.sha }}') { console.error('image says', b); process.exit(1) }
+             console.log('image is', b.shortCommit, 'built', b.builtAt)"
       - name: the desk refuses to start without a database
         run: |
           if docker run --rm -e MONGO_URI=mongodb://127.0.0.1:1/none \

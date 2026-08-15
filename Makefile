@@ -58,7 +58,8 @@ releasable: ## check the tree is fit to deploy
 
 .PHONY: up
 up: ## start mongo and the desk in docker
-	$(COMPOSE) up --build -d
+	GIT_COMMIT=$$(git rev-parse HEAD) BUILT_AT=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		$(COMPOSE) up --build -d
 
 .PHONY: setup
 setup: ## migrate and seed the docker database

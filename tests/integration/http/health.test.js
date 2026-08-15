@@ -165,3 +165,22 @@ describe('what ready actually means', () => {
     expect(typeof health.set).toBe('string');
   });
 });
+
+describe('what is deployed', () => {
+  it('says the version, the commit and the node', async () => {
+    const { app } = buildTestApp({ operator: null });
+
+    const res = await request(app).get('/health/version').expect(200);
+
+    expect(res.body.service).toBe('printdesk');
+    expect(res.body.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(res.body.node).toBe(process.version);
+    expect(['image', 'checkout', 'unknown']).toContain(res.body.source);
+  });
+
+  it('is readable without a token, because a deploy check has none', async () => {
+    const { app } = buildTestApp({ operator: null });
+
+    await request(app).get('/health/version').expect(200);
+  });
+});

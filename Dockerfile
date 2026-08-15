@@ -25,6 +25,12 @@ ENV NODE_ENV=production \
     PORT=4010 \
     NODE_OPTIONS=--enable-source-maps
 
+# Which commit this image is. Passed in by the build rather than read from a
+# .git directory, because the image does not carry one.
+ARG GIT_COMMIT=unknown
+ARG BUILT_AT=unknown
+RUN printf '{"commit":"%s","builtAt":"%s"}\n' "$GIT_COMMIT" "$BUILT_AT" > /srv/printdesk/build.json
+
 COPY --from=dependencies /srv/printdesk/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
