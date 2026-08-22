@@ -56,6 +56,10 @@ audit: ## look for advisories, ignoring the ones written down as accepted
 releasable: ## check the tree is fit to deploy
 	node scripts/releasable.js
 
+.PHONY: release-notes
+release-notes: ## what changed since the last tag, grouped by area
+	node scripts/release-notes.js $(VERSION)
+
 .PHONY: up
 up: ## start mongo and the desk in docker
 	GIT_COMMIT=$$(git rev-parse HEAD) BUILT_AT=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \
