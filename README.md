@@ -139,3 +139,16 @@ make check              # what has to pass before a push
 
 The integration suite starts one in-memory replica set for the whole run and
 gives each jest worker its own database inside it.
+
+Coverage has floors rather than targets, and the rules are held to a higher one
+than the rest: `src/domain` has no database, no clock and no excuse for an
+untested path, while the http layer is mostly wiring that the integration
+tests walk through anyway.
+
+Before a release:
+
+```
+make check        # lint, format and the whole suite
+make audit        # advisories, minus the ones written down in audit-accepted.json
+make releasable   # the tree is committed, the version is new, nothing is focused
+```

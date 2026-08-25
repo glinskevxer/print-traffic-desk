@@ -23,7 +23,7 @@ describe('booking model', () => {
     const title = overrides.title || (await makeTitle())._id;
     const venue = overrides.venue || (await makeVenue())._id;
     return Booking.create({
-      reference: bookingReference(new Date('2025-06-20T18:30:00Z')),
+      reference: bookingReference('2025-06-20'),
       screeningAt: new Date('2025-06-20T18:30:00Z'),
       localDate: '2025-06-20',
       localTime: '19:30',

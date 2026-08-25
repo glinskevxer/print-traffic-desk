@@ -18,12 +18,18 @@ module.exports = {
   // Floors, not targets. They sit a little under where the suite is now, so a
   // change that drops coverage noticeably fails and one that drops it by a
   // line does not turn into a chore for whoever is holding the pull request.
+  //
+  // A path threshold takes those files out of the global group, so the global
+  // numbers below cover what is left: the http layer, the models, the command
+  // line and the plumbing around them, which is lower than the whole tree
+  // reads because the rules are held to a much higher floor of their own.
   coverageThreshold: {
-    global: { statements: 92, branches: 82, functions: 92, lines: 93 },
+    global: { statements: 89, branches: 78, functions: 85, lines: 90 },
     // The rules are the part worth insisting on: they have no database, no
     // clock and no excuse for an untested path.
     './src/domain/': { statements: 96, branches: 88, functions: 96, lines: 96 },
-    './src/lib/': { statements: 95, branches: 86, functions: 95, lines: 96 },
+    './src/lib/': { statements: 95, branches: 88, functions: 95, lines: 96 },
+    './src/services/': { statements: 94, branches: 80, functions: 96, lines: 95 },
   },
   projects: [
     {
