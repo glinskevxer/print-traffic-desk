@@ -52,6 +52,15 @@ check: lint test ## what has to pass before a push
 audit: ## look for advisories, ignoring the ones written down as accepted
 	node scripts/audit-dependencies.js
 
+.PHONY: export-check
+export-check: ## unpack the committed tree on its own and check it stands up
+	rm -rf tmp/export && mkdir -p tmp/export
+	git archive HEAD | tar -x -C tmp/export
+	cd tmp/export && npm ci --no-audit --no-fund
+	cd tmp/export && npx eslint src tests scripts --max-warnings=0
+	cd tmp/export && npx prettier --check src tests scripts
+	cd tmp/export && npx jest --selectProjects unit --ci
+
 .PHONY: releasable
 releasable: ## check the tree is fit to deploy
 	node scripts/releasable.js

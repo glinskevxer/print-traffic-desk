@@ -19,6 +19,22 @@ function run(command, args) {
   return execFileSync(command, args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
 }
 
+/**
+ * Whether this tree came out of git at all.
+ *
+ * A `git archive` export has every file and no history, which is what a
+ * container image holds and what somebody unpacking a tarball has. The checks
+ * that ask git something cannot answer there, and saying so is more use than
+ * passing on git's own complaint about a missing .git directory.
+ */
+function isCheckout() {
+  return fs.existsSync(path.join(ROOT, '.git'));
+}
+
+function needsCheckout(name) {
+  throw new Error(`${name} needs a git checkout, and this is not one`);
+}
+
 function check(name, fn) {
   try {
     const detail = fn();
@@ -29,6 +45,7 @@ function check(name, fn) {
 }
 
 function nothingUncommitted() {
+  if (!isCheckout()) needsCheckout('the committed state');
   const status = run('git', ['status', '--porcelain']).trim();
   if (status) throw new Error(`${status.split('\n').length} files are not committed`);
   return 'the tree is clean';
@@ -37,6 +54,9 @@ function nothingUncommitted() {
 function versionIsNew() {
   const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`${version} is not a version`);
+  // An export has the version but no tags to compare it against, and saying
+  // what it can see is more use than refusing to answer at all.
+  if (!isCheckout()) return `version ${version}, and no history to compare it against`;
 
   const tags = run('git', ['tag', '--list'])
     .split('\n')
@@ -59,6 +79,7 @@ function lockMatchesManifest() {
 }
 
 function noSecretsCommitted() {
+  if (!isCheckout()) needsCheckout('the committed file list');
   const tracked = run('git', ['ls-files']).split('\n');
   const bad = tracked.filter((file) => /^\.env(\..+)?$/.test(file) && file !== '.env.example');
   if (bad.length > 0) throw new Error(`${bad.join(', ')} is committed`);
@@ -70,6 +91,7 @@ function noSecretsCommitted() {
  * non zero exit is not a failure and has to be read rather than thrown on.
  */
 function grepTests(pattern) {
+  if (!isCheckout()) needsCheckout('a search of the committed tests');
   try {
     return run('git', ['grep', '-nE', pattern, '--', 'tests/']).trim().split('\n').filter(Boolean);
   } catch (err) {
@@ -140,4 +162,4 @@ if (require.main === module) {
   process.exit(main());
 }
 
-module.exports = { releasable, CHECKS, check };
+module.exports = { releasable, CHECKS, check, isCheckout };

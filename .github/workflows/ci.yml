@@ -66,6 +66,37 @@ jobs:
         env:
           MONGOMS_VERSION: ${{ matrix.mongod }}
 
+  # What ships is the committed tree, not the working one. This unpacks exactly
+  # that, installs from the lock file and runs what does not need a database.
+  # It has already caught two tests that quietly assumed a .git directory.
+  export:
+    name: the committed tree stands on its own
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: unpack the committed tree on its own
+        run: |
+          mkdir -p /tmp/export
+          git archive HEAD | tar -x -C /tmp/export
+          test ! -e /tmp/export/.git
+      - name: install from the lock file alone
+        working-directory: /tmp/export
+        run: npm ci --no-audit --no-fund
+      - name: lint and format the tree as committed
+        working-directory: /tmp/export
+        run: |
+          npx eslint src tests scripts --max-warnings=0
+          npx prettier --check src tests scripts
+      - name: the tests that need no database
+        working-directory: /tmp/export
+        run: npx jest --selectProjects unit --ci
+      - name: the release checks say what they cannot answer
+        working-directory: /tmp/export
+        run: node scripts/releasable.js || true
+
   coverage:
     name: coverage
     runs-on: ubuntu-24.04

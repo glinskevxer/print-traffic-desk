@@ -148,7 +148,14 @@ tests walk through anyway.
 Before a release:
 
 ```
-make check        # lint, format and the whole suite
-make audit        # advisories, minus the ones written down in audit-accepted.json
-make releasable   # the tree is committed, the version is new, nothing is focused
+make check         # lint, format and the whole suite
+make audit         # advisories, minus the ones written down in audit-accepted.json
+make export-check  # the committed tree, unpacked on its own, still stands up
+make releasable    # the tree is committed, the version is new, nothing is focused
 ```
+
+`export-check` is the one worth explaining. It unpacks `git archive HEAD` into
+an empty directory, installs from the lock file and runs everything that does
+not need a database. What ships is the committed tree, not the working one, and
+that difference has already hidden two tests that quietly assumed a `.git`
+directory was there to read.
