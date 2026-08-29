@@ -61,6 +61,16 @@ function serialiseError(err) {
   return base;
 }
 
+/** Whether the pretty printer is actually installed in this build. */
+function prettyAvailable() {
+  try {
+    require.resolve('pino-pretty');
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 function createLogger({ level = 'info', pretty = false, service = 'printdesk', destination } = {}) {
   const options = {
     level,
@@ -70,13 +80,20 @@ function createLogger({ level = 'info', pretty = false, service = 'printdesk', d
     timestamp: pino.stdTimeFunctions.isoTime,
   };
 
-  if (pretty) {
+  // pino-pretty is a development dependency, so a production image built with
+  // --omit=dev does not have it. Asking for pretty logs there used to take the
+  // process down on the first line it tried to write; now it falls back to the
+  // json a log collector wants anyway and says so once.
+  if (pretty && prettyAvailable()) {
     return pino({
       ...options,
       transport: { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss' } },
     });
   }
-  return destination ? pino(options, destination) : pino(options);
+
+  const log = destination ? pino(options, destination) : pino(options);
+  if (pretty) log.warn('pino-pretty is not installed, writing json instead');
+  return log;
 }
 
 let rootLogger = null;
@@ -128,6 +145,7 @@ function findSecretShapes(text) {
 
 module.exports = {
   createLogger,
+  prettyAvailable,
   logger,
   setLoggerForTests,
   serialiseError,
